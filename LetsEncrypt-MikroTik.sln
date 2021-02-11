@@ -1,0 +1,50 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29020.237
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LetsEncryptMikroTik.Core", "MikroTikLetsEncrypt\LetsEncryptMikroTik.Core.csproj", "{ED69EEB3-0F0D-47D5-9C98-EB357BEAF37B}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Console", "ConsoleApp1\Console.csproj", "{857E959D-BA38-4314-A272-072FA092B9F5}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WinFormCoreGui", "WinFormCoreGui\WinFormCoreGui.csproj", "{0EAFE758-64A2-4745-9811-6142C543560C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{FC2A3612-717D-4E7D-A439-56CF012138EB}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AndroidApp2", "AndroidApp2\AndroidApp2.csproj", "{6697D5BE-2846-437B-89AE-D7D7F98FFA33}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{ED69EEB3-0F0D-47D5-9C98-EB357BEAF37B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ED69EEB3-0F0D-47D5-9C98-EB357BEAF37B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ED69EEB3-0F0D-47D5-9C98-EB357BEAF37B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ED69EEB3-0F0D-47D5-9C98-EB357BEAF37B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{857E959D-BA38-4314-A272-072FA092B9F5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{857E959D-BA38-4314-A272-072FA092B9F5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{857E959D-BA38-4314-A272-072FA092B9F5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{857E959D-BA38-4314-A272-072FA092B9F5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0EAFE758-64A2-4745-9811-6142C543560C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0EAFE758-64A2-4745-9811-6142C543560C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0EAFE758-64A2-4745-9811-6142C543560C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0EAFE758-64A2-4745-9811-6142C543560C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6697D5BE-2846-437B-89AE-D7D7F98FFA33}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6697D5BE-2846-437B-89AE-D7D7F98FFA33}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6697D5BE-2846-437B-89AE-D7D7F98FFA33}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{6697D5BE-2846-437B-89AE-D7D7F98FFA33}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6697D5BE-2846-437B-89AE-D7D7F98FFA33}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6697D5BE-2846-437B-89AE-D7D7F98FFA33}.Release|Any CPU.Deploy.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {87F286A8-95B8-4592-A7F4-5EF5E31A130C}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,32 @@
+﻿using Serilog;
+using Serilog.Core;
+using Serilog.Events;
+using Serilog.Formatting;
+using Serilog.Formatting.Display;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Text;
+
+namespace LetsEncryptMikroTik.Core
+{
+    public abstract class InMemorySink : ILogEventSink
+    {
+        private readonly ITextFormatter _textFormatter = new MessageTemplateTextFormatter("[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}", CultureInfo.CurrentUICulture);
+
+        public void Emit(LogEvent logEvent)
+        {
+            string message;
+            using (var renderSpace = new StringWriter())
+            {
+                _textFormatter.Format(logEvent, renderSpace);
+                message = renderSpace.ToString();
+            }
+            NewEntry(message);
+        }
+
+        public abstract void NewEntry(string message);
+    }
+}
