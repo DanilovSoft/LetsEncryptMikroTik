@@ -8,10 +8,6 @@
     <AssemblyName>LetsEncryptMikroTik</AssemblyName>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="5.0.0" />
-  </ItemGroup>
-
   <!--<ItemGroup>
     <Compile Include="..\WindowsFormsApp1\Form1.Designer.cs" Link="Form1.Designer.cs" />
   </ItemGroup>
