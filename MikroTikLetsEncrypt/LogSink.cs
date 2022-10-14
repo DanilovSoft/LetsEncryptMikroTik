@@ -5,23 +5,22 @@ using Serilog.Formatting.Display;
 using System.Globalization;
 using System.IO;
 
-namespace LetsEncryptMikroTik.Core
+namespace LetsEncryptMikroTik.Core;
+
+public abstract class InMemorySink : ILogEventSink
 {
-    public abstract class InMemorySink : ILogEventSink
+    private readonly ITextFormatter _textFormatter = new MessageTemplateTextFormatter("[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}", CultureInfo.CurrentUICulture);
+
+    public void Emit(LogEvent logEvent)
     {
-        private readonly ITextFormatter _textFormatter = new MessageTemplateTextFormatter("[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}", CultureInfo.CurrentUICulture);
-
-        public void Emit(LogEvent logEvent)
+        string message;
+        using (var renderSpace = new StringWriter())
         {
-            string message;
-            using (var renderSpace = new StringWriter())
-            {
-                _textFormatter.Format(logEvent, renderSpace);
-                message = renderSpace.ToString();
-            }
-            NewEntry(message);
+            _textFormatter.Format(logEvent, renderSpace);
+            message = renderSpace.ToString();
         }
-
-        public abstract void NewEntry(string message);
+        NewEntry(message);
     }
+
+    public abstract void NewEntry(string message);
 }

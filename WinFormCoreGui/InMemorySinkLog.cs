@@ -1,19 +1,18 @@
 ﻿using LetsEncryptMikroTik.Core;
 
-namespace LetsEncryptMikroTik
+namespace LetsEncryptMikroTik;
+
+internal class InMemorySinkLog : InMemorySink
 {
-    internal class InMemorySinkLog : InMemorySink
+    private readonly Form1 _form;
+
+    public InMemorySinkLog(Form1 form)
     {
-        private readonly Form1 _form;
+        _form = form;
+    }
 
-        public InMemorySinkLog(Form1 form)
-        {
-            _form = form;
-        }
-
-        public override void NewEntry(string message)
-        {
-            _form.OnLogMessage(message);
-        }
+    public override void NewEntry(string message)
+    {
+        _form.OnLogMessage(message);
     }
 }
