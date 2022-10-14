@@ -1,18 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Net;
-using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Certes;
 using Certes.Acme;
 using Certes.Acme.Resource;
-using Certes.Pkcs;
 using DanilovSoft.MikroApi;
 using Serilog;
 
@@ -69,7 +63,7 @@ namespace LetsEncryptMikroTik.Core
             }
 
             Log.Information("Заказываем новый сертификат.");
-            IOrderContext order = await acme.NewOrder(new[] { _config.DomainName }).ConfigureAwait(false);
+            var order = await acme.NewOrder(new[] { _config.DomainName }).ConfigureAwait(false);
 
             // Get the token and key authorization string.
             Log.Information("Получаем способы валидации заказа.");
@@ -78,17 +72,22 @@ namespace LetsEncryptMikroTik.Core
             if (_config.UseAlpn)
             {
                 Log.Information("Выбираем TLS-ALPN-01 способ валидации.");
-                IChallengeContext challenge = await authz.TlsAlpn().ConfigureAwait(false);
-                string keyAuthz = challenge.KeyAuthz;
-                string token = challenge.Token;
+                var challenge = await authz.TlsAlpn().ConfigureAwait(false);
+                if (challenge is null)
+                {
+                    throw new InvalidOperationException("No TLS ALPN challenge available");
+                }
+
+                var keyAuthz = challenge.KeyAuthz;
+                var token = challenge.Token;
 
                 await ChallengeAlpnAsync(challenge, keyAuthz).ConfigureAwait(false);
             }
             else
             {
                 Log.Information("Выбираем HTTP-01 способ валидации.");
-                IChallengeContext challenge = await authz.Http().ConfigureAwait(false);
-                string keyAuthz = challenge.KeyAuthz;
+                var challenge = await authz.Http().ConfigureAwait(false);
+                var keyAuthz = challenge.KeyAuthz;
 
                 await HttpChallengeAsync(challenge, keyAuthz).ConfigureAwait(false);
             }
@@ -96,9 +95,9 @@ namespace LetsEncryptMikroTik.Core
             Log.Information("Загружаем сертификат.");
 
             // Download the certificate once validation is done
-            IKey privateKey = KeyFactory.NewKey(KeyAlgorithm.RS256);
+            var privateKey = KeyFactory.NewKey(KeyAlgorithm.RS256);
 
-            CertificateChain cert = await order.Generate(new CsrInfo
+            var cert = await order.Generate(new CsrInfo
             {
                 CommonName = _config.DomainName,
                 CountryName = "CA",
@@ -110,12 +109,12 @@ namespace LetsEncryptMikroTik.Core
                 .ConfigureAwait(false);
 
             // Export full chain certification.
-            string certPem = cert.ToPem();
-            string keyPem = privateKey.ToPem();
+            var certPem = cert.ToPem();
+            var keyPem = privateKey.ToPem();
 
             // Export PFX
-            PfxBuilder pfxBuilder = cert.ToPfx(privateKey);
-            byte[] pfx = pfxBuilder.Build(friendlyName: _config.DomainName, password: "");
+            var pfxBuilder = cert.ToPfx(privateKey);
+            var pfx = pfxBuilder.Build(friendlyName: _config.DomainName, password: "");
 
             //await acme.RevokeCertificate(pfx, RevocationReason.Superseded, privateKey);
 
@@ -150,9 +149,9 @@ namespace LetsEncryptMikroTik.Core
             Log.Information("Запускаем веб-сервер.");
             challenge.Start();
 
-            string mtNatId = MtAddDstNatRule(dstPort: challenge.PublicPort, toPorts: challenge.ListenPort);
-            string mtFilterId = MtAllowPortFilter(dstPort: challenge.ListenPort, publicPort: challenge.PublicPort);
-            string mtMangleId = MtAllowMangleRule(dstPort: challenge.ListenPort);
+            var mtNatId = MtAddDstNatRule(dstPort: challenge.PublicPort, toPorts: challenge.ListenPort);
+            var mtFilterId = MtAllowPortFilter(dstPort: challenge.ListenPort, publicPort: challenge.PublicPort);
+            var mtMangleId = MtAllowMangleRule(dstPort: challenge.ListenPort);
 
             // Правило в микротике начинает работать не мгновенно.
             await Task.Delay(2000).ConfigureAwait(false);
@@ -162,15 +161,15 @@ namespace LetsEncryptMikroTik.Core
             {
                 // Ask the ACME server to validate our domain ownership.
                 Log.Information("Информируем Let's Encrypt что мы готовы пройти валидацию.");
-                Challenge? status = await httpChallenge.Validate().ConfigureAwait(false);
+                var status = await httpChallenge.Validate().ConfigureAwait(false);
 
-                bool waitWithSem = true;
+                var waitWithSem = true;
                 while (status.Status == ChallengeStatus.Pending)
                 {
                     if (waitWithSem)
                     {
                         Log.Information("Ожидаем 20 сек. входящий HTTP запрос.");
-                        Task t = await Task.WhenAny(Task.Delay(20_000), challenge.Completion).ConfigureAwait(false);
+                        var t = await Task.WhenAny(Task.Delay(20_000), challenge.Completion).ConfigureAwait(false);
 
                         if (t == challenge.Completion)
                         {
@@ -219,12 +218,12 @@ namespace LetsEncryptMikroTik.Core
         {
             Log.Information($"Создаём правило разрешающее соединения на {publicPort} порт в фаерволе микротика.");
 
-            string id = _mtCon.Command("/ip firewall filter add")
+            var id = _mtCon.Command("/ip firewall filter add")
                 .Attribute("chain", "forward")
                 .Attribute("dst-address", _thisMachineIp.ToString())
                 .Attribute("protocol", "tcp")
                 .Attribute("dst-port", $"{dstPort}")
-                .Attribute("in-interface", _config.WanIface)
+                //.Attribute("in-interface", _config.WanIface)
                 .Attribute("action", "accept")
                 .Attribute("disabled", "true")
                 .Attribute("comment", "Let's Encrypt challenge")
@@ -233,7 +232,7 @@ namespace LetsEncryptMikroTik.Core
             Log.Information("Получаем список всех статичных правил фаервола микротика.");
 
             // Список всех правил.
-            string[] ids = _mtCon.Command("/ip firewall filter print")
+            var ids = _mtCon.Command("/ip firewall filter print")
                 .Query("dynamic", "false")
                 .Proplist(".id")
                 .ScalarArray<string>();
@@ -264,7 +263,7 @@ namespace LetsEncryptMikroTik.Core
         {
             Log.Information($"Создаём правило мангла для прямой маршрутизации порта {dstPort}.");
 
-            string id = _mtCon.Command("/ip firewall mangle add")
+            var id = _mtCon.Command("/ip firewall mangle add")
                 .Attribute("chain", "prerouting")
                 .Attribute("src-address", _thisMachineIp.ToString())
                 .Attribute("protocol", "tcp")
@@ -278,7 +277,7 @@ namespace LetsEncryptMikroTik.Core
             Log.Information("Получаем список всех статичных правил мангла.");
 
             // Список всех правил.
-            string[] ids = _mtCon.Command("/ip firewall mangle print")
+            var ids = _mtCon.Command("/ip firewall mangle print")
                 .Query("dynamic", "false")
                 .Proplist(".id")
                 .ScalarArray<string>();
@@ -322,11 +321,11 @@ namespace LetsEncryptMikroTik.Core
         {
             Log.Information("Создаём выключенное правило NAT в микротике.");
 
-            string ruleId = _mtCon.Command("/ip firewall nat add")
+            var ruleId = _mtCon.Command("/ip firewall nat add")
                 .Attribute("chain", "dstnat")
                 .Attribute("protocol", "tcp")
                 .Attribute("dst-port", $"{dstPort}")
-                .Attribute("in-interface", _config.WanIface)
+                //.Attribute("in-interface", _config.WanIface)
                 .Attribute("action", "netmap")
                 .Attribute("to-addresses", _thisMachineIp.ToString())
                 .Attribute("to-ports", $"{toPorts}")
@@ -337,7 +336,7 @@ namespace LetsEncryptMikroTik.Core
             Log.Information("Получаем список всех статичных правил NAT микротика.");
 
             // Список всех правил.
-            string[] ids = _mtCon.Command("/ip firewall nat print")
+            var ids = _mtCon.Command("/ip firewall nat print")
                 .Query("dynamic", "false")
                 .Proplist(".id")
                 .ScalarArray<string>();

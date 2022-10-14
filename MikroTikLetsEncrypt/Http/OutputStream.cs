@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
+﻿using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -85,7 +83,7 @@ namespace System.Net
             }
 
             sb.AppendLine();
-            byte[] headers = Encoding.ASCII.GetBytes(sb.ToString());
+            var headers = Encoding.ASCII.GetBytes(sb.ToString());
             await _stream.WriteAsync(headers, 0, headers.Length).ConfigureAwait(false);
         }
 

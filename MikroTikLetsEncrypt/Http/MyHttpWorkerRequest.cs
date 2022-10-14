@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace System.Web
+﻿namespace System.Web
 {
     internal static class MyHttpWorkerRequest
     {
@@ -11,8 +9,8 @@ namespace System.Web
         {
             if (code >= 100 && code < 600)
             {
-                int i = code / 100;
-                int j = code % 100;
+                var i = code / 100;
+                var j = code % 100;
 
                 if (j < s_HTTPStatusDescriptions[i].Length)
                     return s_HTTPStatusDescriptions[i][j];

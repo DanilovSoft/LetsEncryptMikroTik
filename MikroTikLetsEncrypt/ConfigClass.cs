@@ -1,9 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
-using System.Runtime.Serialization;
-using System.Text;
 
 namespace LetsEncryptMikroTik.Core
 {

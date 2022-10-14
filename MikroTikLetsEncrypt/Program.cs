@@ -1,16 +1,12 @@
 ﻿using DanilovSoft.MikroApi;
 using Serilog;
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Security;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace LetsEncryptMikroTik.Core
@@ -99,11 +95,11 @@ namespace LetsEncryptMikroTik.Core
         /// </summary>
         private static async Task<IPAddress> GetLocalEndPointForAsync(string host, int port)
         {
-            if (!IPAddress.TryParse(host, out IPAddress remote))
+            if (!IPAddress.TryParse(host, out var remote))
             {
                 var dns = new DnsEndPoint(host, port, AddressFamily.InterNetwork);
                 Log.Information($"Определяем IP-адрес для узла {dns.Host}.");
-                IPHostEntry entry = await Dns.GetHostEntryAsync(dns.Host).ConfigureAwait(false);
+                var entry = await Dns.GetHostEntryAsync(dns.Host).ConfigureAwait(false);
                 remote = entry.AddressList[0];
             }
 
@@ -159,12 +155,12 @@ namespace LetsEncryptMikroTik.Core
                     }
                     //else
                     {
-                        con.Connect(Config.MikroTikAddress, Config.MikroTikPort, Config.MikroTikLogin, Config.MikroTikPassword);
+                        con.Connect(Config.MikroTikLogin, Config.MikroTikPassword, Config.MikroTikAddress, useSsl: false, Config.MikroTikPort);
                     }
                 }
-                catch (MikroTikTrapException ex) when (ex.Message == "std failure: not allowed (9)")
+                catch (MikroApiTrapException ex) when (ex.Message == "std failure: not allowed (9)")
                 {
-                    string message = $"Не удалось авторизоваться пользователю '{Config.MikroTikLogin}'. Проверьте права пользователя на доступ к api.";
+                    var message = $"Не удалось авторизоваться пользователю '{Config.MikroTikLogin}'. Проверьте права пользователя на доступ к api.";
                     Log.Error(message);
                     throw new LetsEncryptMikroTikException(message, ex);
                 }
@@ -177,9 +173,9 @@ namespace LetsEncryptMikroTik.Core
                 {
                     await UpdateCertificateAsync(con).ConfigureAwait(false);
                 }
-                catch (MikroTikTrapException ex) when (ex.Message == "not enough permissions (9)")
+                catch (MikroApiTrapException ex) when (ex.Message == "not enough permissions (9)")
                 {
-                    string message = $"У пользователя '{Config.MikroTikLogin}' недостаточно прав в микротике. Требуются права: api, read, write, ftp.";
+                    var message = $"У пользователя '{Config.MikroTikLogin}' недостаточно прав в микротике. Требуются права: api, read, write, ftp.";
                     Log.Error(message);
                     throw new LetsEncryptMikroTikException(message, ex);
                 }
@@ -196,10 +192,10 @@ namespace LetsEncryptMikroTik.Core
             // Валидация имени WAN-интерфейса.
             CheckWanInterface(con);
 
-            bool mtHasOldCert = TryGetExpiredAfter(con, Config.DomainName, out TimeSpan expires, out CertificateDto[] existedCertes);
+            var mtHasOldCert = TryGetExpiredAfter(con, Config.DomainName, out var expires, out var existedCertes);
             if (mtHasOldCert)
             {
-                int daysLeft = (int)expires.TotalDays;
+                var daysLeft = (int)expires.TotalDays;
                 if (daysLeft > Config.ReplaceCertOnDaysLessThan && !Config.Force)
                 {
                     Log.Information($"В микротике есть ещё актуальный сертификат который истекает через {daysLeft} {Days(daysLeft)}. Завершаем работу.");
@@ -212,13 +208,13 @@ namespace LetsEncryptMikroTik.Core
             }
 
             LetsEncryptCert newCert;
-            string certFileName = $"{Config.DomainName}-cert.pem";
-            string certPrivKeyFileName = $"{Config.DomainName}-key.pem";
+            var certFileName = $"{Config.DomainName}-cert.pem";
+            var certPrivKeyFileName = $"{Config.DomainName}-key.pem";
 
             if (Config.SaveFile)
             {
-                string certFilePath = GetFilePath(certFileName);
-                string keyFilePath = GetFilePath(certPrivKeyFileName);
+                var certFilePath = GetFilePath(certFileName);
+                var keyFilePath = GetFilePath(certPrivKeyFileName);
 
                 CreateDirectory(certFilePath);
                 CreateDirectory(keyFilePath);
@@ -227,9 +223,9 @@ namespace LetsEncryptMikroTik.Core
                 {
                     // Перед загрузкой сертификата убедимся что мы сможем его сохранить.
                     Log.Information($"Создаём файлы в папке '{FolderName}'.");
-                    using (StreamWriter? certStream = File.CreateText(certFilePath))
+                    using (var certStream = File.CreateText(certFilePath))
                     {
-                        using (StreamWriter? keyStream = File.CreateText(keyFilePath))
+                        using (var keyStream = File.CreateText(keyFilePath))
                         {
                             var acme = new Acme(con, Config);
 
@@ -281,7 +277,7 @@ namespace LetsEncryptMikroTik.Core
 
             if (mtHasOldCert && expires.TotalDays > 1)
             {
-                int daysValid = (int)expires.TotalDays;
+                var daysValid = (int)expires.TotalDays;
 
                 // Оставляем сообщение в логах микротика.
                 AddWarning(con, $"Был добавлен новый сертификат '{Config.DomainName}'. Старый сертификат будет актуален ещё {daysValid} {Days(daysValid)}");
@@ -312,7 +308,7 @@ namespace LetsEncryptMikroTik.Core
 
             foreach (var mtNewCert in newCertes)
             {
-                string newName = "new_" + mtNewCert.Name;
+                var newName = "new_" + mtNewCert.Name;
 
                 while (CertExists(con, newName))
                 {
@@ -330,11 +326,11 @@ namespace LetsEncryptMikroTik.Core
 
         private static void RenameOldMtCerts(MikroTikConnection con, CertificateDto[] cert)
         {
-            foreach (CertificateDto c in cert)
+            foreach (var c in cert)
             {
                 if (!c.Name.StartsWith("old_", StringComparison.Ordinal))
                 {
-                    string newOldName = "old_" + c.Name;
+                    var newOldName = "old_" + c.Name;
 
                     while (CertExists(con, newOldName))
                     {
@@ -363,7 +359,7 @@ namespace LetsEncryptMikroTik.Core
         {
             Log.Information($"Проверяем что в микротике есть интерфейс '{Config.WanIface}'.");
 
-            string ifaceId = con.Command("/interface print")
+            var ifaceId = con.Command("/interface print")
                 .Query("name", Config.WanIface)
                 .Proplist(".id")
                 .ScalarOrDefault<string>();
@@ -374,7 +370,7 @@ namespace LetsEncryptMikroTik.Core
 
         private static void CreateDirectory(string filePath)
         {
-            string? directoryPath = Path.GetDirectoryName(filePath);
+            var directoryPath = Path.GetDirectoryName(filePath);
             if (!Directory.Exists(directoryPath))
             {
                 Directory.CreateDirectory(directoryPath);
@@ -383,14 +379,19 @@ namespace LetsEncryptMikroTik.Core
 
         private static string GetFilePath(string fileName)
         {
-            string extension = Path.GetExtension(fileName);
-            string fn = Path.GetFileNameWithoutExtension(fileName);
+            foreach (var c in Path.GetInvalidFileNameChars())
+            {
+                fileName = fileName.Replace(c, '_');
+            }
+
+            var extension = Path.GetExtension(fileName);
+            var fn = Path.GetFileNameWithoutExtension(fileName);
             string filePath;
 
-            int n = 0;
+            var n = 0;
             do
             {
-                filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory!, FolderName, fileName);
+                filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FolderName, fileName);
 
                 if (File.Exists(filePath))
                 {
@@ -406,7 +407,7 @@ namespace LetsEncryptMikroTik.Core
         private async Task UploadFtpAsync(MikroTikConnection con, string certFileName, string certPrivKeyFileName, LetsEncryptCert cert)
         {
             // Включить FTP в микротике.
-            EnableFtp(con, out int ftpPort, out bool enabledChanged, out bool allowedChanged, out string allowedAddresses);
+            EnableFtp(con, out var ftpPort, out var enabledChanged, out var allowedChanged, out var allowedAddresses);
             try
             {
                 // Загружаем сертификат в микротик по FTP.
@@ -431,7 +432,7 @@ namespace LetsEncryptMikroTik.Core
                 .Proplist(".id,name,invalid-after")
                 .ToArray<CertificateDto>();
 
-            DateTime? invalidAfter = certes.Select(x => new { Cert = x, InvalidAfter = (DateTime?)DateTime.Parse(x.InvalidAfter, CultureInfo.InvariantCulture) })
+            var invalidAfter = certes.Select(x => new { Cert = x, InvalidAfter = (DateTime?)DateTime.Parse(x.InvalidAfter, CultureInfo.InvariantCulture) })
                 .DefaultIfEmpty()
                 .Min(x => x?.InvalidAfter);
 
@@ -447,7 +448,7 @@ namespace LetsEncryptMikroTik.Core
 
         private static bool TryImport(MikroTikConnection con, string fileName)
         {
-            int filesImported = con.Command("/certificate import")
+            var filesImported = con.Command("/certificate import")
                 .Attribute("file-name", fileName)
                 .Attribute("passphrase", "")
                 .Scalar<int>("files-imported");
@@ -457,7 +458,7 @@ namespace LetsEncryptMikroTik.Core
 
         private static string Days(int days)
         {
-            int n = Math.Abs(days) % 100;
+            var n = Math.Abs(days) % 100;
             if ((n % 10 == 0) || (n % 10 >= 5 && n % 10 <= 9) || (n > 9 && n < 20))
             {
                 return "дней";
@@ -513,7 +514,7 @@ namespace LetsEncryptMikroTik.Core
 
             Log.Information("Проверяем что файл появился в микротике.");
 
-            string fileId = MtGetFileId(con, fileName);
+            var fileId = MtGetFileId(con, fileName);
 
             // Файл может появиться не сразу.
             if (fileId == null)
@@ -536,7 +537,7 @@ namespace LetsEncryptMikroTik.Core
 
         private static string MtGetFileId(MikroTikConnection con, string fileName)
         {
-            string fileId = con.Command("/file print")
+            var fileId = con.Command("/file print")
                     .Query("name", fileName)
                     .Proplist(".id")
                     .ScalarOrDefault();
@@ -595,7 +596,7 @@ namespace LetsEncryptMikroTik.Core
             ftpPort = ftpService.Port;
             allowedAddresses = ftpService.Address;
 
-            bool connectionAllowed = true;
+            var connectionAllowed = true;
             if (ftpService.Addresses != null)
             {
                 connectionAllowed = ftpService.Addresses.Any(x =>
@@ -603,9 +604,9 @@ namespace LetsEncryptMikroTik.Core
                     if (string.IsNullOrEmpty(x))
                         return true;
 
-                    string[] parts = x.Split('/');
+                    var parts = x.Split('/');
                     var ipAddress = IPAddress.Parse(parts[0]);
-                    int netMask = int.Parse(parts[1], CultureInfo.InvariantCulture);
+                    var netMask = int.Parse(parts[1], CultureInfo.InvariantCulture);
                     return IsInRange(Config.ThisMachineIp, ipAddress, netMask);
                 });
             }
@@ -620,7 +621,7 @@ namespace LetsEncryptMikroTik.Core
                 else
                     enabledChanged = false;
 
-                string address = ftpService.Address;
+                var address = ftpService.Address;
                 if (!connectionAllowed)
                 {
                     allowedChanged = true;
@@ -647,7 +648,7 @@ namespace LetsEncryptMikroTik.Core
         // bool result = IsInRange("10.50.30.7", "10.0.0.0/8");
         private static bool IsInRange(IPAddress ipAddress, IPAddress ipAddress2, int netMask)
         {
-            IPAddress mask = BitsToIpAddress(netMask);
+            var mask = BitsToIpAddress(netMask);
             return ipAddress.IsInSameSubnet(ipAddress2, mask);
         }
 
@@ -681,9 +682,9 @@ namespace LetsEncryptMikroTik.Core
             if (bits == 32)
                 return new IPAddress(uint.MaxValue);
 
-            uint mask = ~(uint.MaxValue >> bits);
+            var mask = ~(uint.MaxValue >> bits);
             //uint mask = (uint.MaxValue << (32 - bits));
-            byte[] bytes = BitConverter.GetBytes(mask);
+            var bytes = BitConverter.GetBytes(mask);
             Array.Reverse(bytes);
             return new IPAddress(bytes);
         }

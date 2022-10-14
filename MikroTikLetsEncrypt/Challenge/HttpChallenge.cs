@@ -1,11 +1,7 @@
 ﻿using Serilog;
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace LetsEncryptMikroTik.Core
@@ -40,7 +36,7 @@ namespace LetsEncryptMikroTik.Core
             {
                 try
                 {
-                    MyHttpListenerContext context = await _listener.GetContextAsync().ConfigureAwait(false);
+                    var context = await _listener.GetContextAsync().ConfigureAwait(false);
                     if (context == null)
                         return; // Слушатель был остановлен.
 
@@ -48,10 +44,10 @@ namespace LetsEncryptMikroTik.Core
                     {
                         Log.Information($"Принят HTTP запрос: {context.Request.Uri.Scheme}://{context.Request.Uri.Host}/...");
 
-                        MyHttpListenerResponse response = context.Response;
+                        var response = context.Response;
                         response.ContentType = "plain/text";
 
-                        byte[] content = Encoding.ASCII.GetBytes(_keyAuthString);
+                        var content = Encoding.ASCII.GetBytes(_keyAuthString);
                         response.ContentLength64 = content.Length;
 
                         using (response.OutputStream)

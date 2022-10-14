@@ -49,7 +49,7 @@ namespace LetsEncryptMikroTik.Core
                     RSASignaturePadding.Pkcs1);
 
                 using var sha = SHA256.Create();
-                byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(_challengeTokenValue));
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(_challengeTokenValue));
                 request.CertificateExtensions.Add(
                     new X509Extension(
                         new AsnEncodedData("1.3.6.1.5.5.7.1.31", new DerOctetString(hash).GetDerEncoded()), true));

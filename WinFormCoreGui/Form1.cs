@@ -1,12 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -51,7 +45,7 @@ namespace LetsEncryptMikroTik
             groupBox_ftp.Enabled = checkBox1.Checked;
 
             comboBox_lec.DataSource = Core.Program.GetAddresses();
-            int selIndex = Properties.Settings.Default.SelectedAddress;
+            var selIndex = Properties.Settings.Default.SelectedAddress;
             if (comboBox_lec.Items.Count - 1 >= selIndex)
             {
                 comboBox_lec.SelectedIndex = Properties.Settings.Default.SelectedAddress;
@@ -63,8 +57,8 @@ namespace LetsEncryptMikroTik
 
         private async void Button_Start_Click(object sender, EventArgs e)
         {
-            string mtLogin = textBox_MtLogin.Text.Trim();
-            string mtPassword = textBox_mtPassword.Text;
+            var mtLogin = textBox_MtLogin.Text.Trim();
+            var mtPassword = textBox_mtPassword.Text;
 
             string ftpLogin;
             string ftpPassword;
@@ -147,8 +141,8 @@ namespace LetsEncryptMikroTik
             {
                 // Encrypt the data using DataProtectionScope.CurrentUser. The result can be decrypted
                 // only by the same current user.
-                byte[] data = Encoding.UTF8.GetBytes(s);
-                byte[] @protected = ProtectedData.Protect(data, s_aditionalEntropy, DataProtectionScope.CurrentUser);
+                var data = Encoding.UTF8.GetBytes(s);
+                var @protected = ProtectedData.Protect(data, s_aditionalEntropy, DataProtectionScope.CurrentUser);
                 return Convert.ToBase64String(@protected);
             }
             catch (CryptographicException e)
@@ -170,9 +164,9 @@ namespace LetsEncryptMikroTik
 
             try
             {
-                byte[] data = Convert.FromBase64String(dataBase64);
+                var data = Convert.FromBase64String(dataBase64);
                 //Decrypt the data using DataProtectionScope.CurrentUser.
-                byte[] unprotected = ProtectedData.Unprotect(data, s_aditionalEntropy, DataProtectionScope.CurrentUser);
+                var unprotected = ProtectedData.Unprotect(data, s_aditionalEntropy, DataProtectionScope.CurrentUser);
                 return Encoding.UTF8.GetString(unprotected);
             }
             catch (CryptographicException e)
@@ -272,7 +266,7 @@ namespace LetsEncryptMikroTik
 
         private void Button1_Click_1(object sender, EventArgs e)
         {
-            string folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Cert");
+            var folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Cert");
 
             if (checkBox_saveFile.Checked)
             {
@@ -301,7 +295,7 @@ namespace LetsEncryptMikroTik
             {
                 using (var dialog = new OpenFileDialog())
                 {
-                    string folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Cert");
+                    var folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Cert");
                     dialog.InitialDirectory = folderPath;
 
                     dialog.Title = "Выберите сертификат";

@@ -1,13 +1,10 @@
-﻿using LetsEncryptMikroTik.Core;
-using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
@@ -27,11 +24,11 @@ namespace System.Net
         public SimpleHttpListener(IPAddress thisMachineIp)
         {
             _address = thisMachineIp;
-            int prefPort = PreferedPort;
-            bool started = false;
+            var prefPort = PreferedPort;
+            var started = false;
             do
             {
-                int listenPort = FindAvailablePort(thisMachineIp, prefPort);
+                var listenPort = FindAvailablePort(thisMachineIp, prefPort);
                 var tcp = new TcpListener(thisMachineIp, listenPort);
                 try
                 {
@@ -63,9 +60,9 @@ namespace System.Net
             // by the netstat command line application, just in .Net strongly-typed object
             // form.  We will look through the list, and if our port we would like to use
             // in our TcpClient is occupied, we will set isAvailable to false.
-            IPGlobalProperties ipGlobalProperties = IPGlobalProperties.GetIPGlobalProperties();
+            var ipGlobalProperties = IPGlobalProperties.GetIPGlobalProperties();
             //TcpConnectionInformation[] tcpConnInfoArray = ipGlobalProperties.GetActiveTcpConnections();
-            IPEndPoint[] listeners = ipGlobalProperties.GetActiveTcpListeners();
+            var listeners = ipGlobalProperties.GetActiveTcpListeners();
 
             while (listeners.Any(x => x.Address.Equals(address) && x.Port == prefPort))
             {
@@ -84,7 +81,7 @@ namespace System.Net
         {
             if (await _channel.Reader.WaitToReadAsync().ConfigureAwait(false))
             {
-                _channel.Reader.TryRead(out MyHttpListenerContext context);
+                _channel.Reader.TryRead(out var context);
                 return context;
             }
             else
@@ -155,11 +152,11 @@ namespace System.Net
             try
             {
                 using (client)
-                using (NetworkStream stream = client.GetStream())
+                using (var stream = client.GetStream())
                 {
                     while (true)
                     {
-                        MyHttpListenerRequest? request = await ReadHeadersAsync(stream).ConfigureAwait(false);
+                        var request = await ReadHeadersAsync(stream).ConfigureAwait(false);
                         if (request == null)
                             return;
 
@@ -185,13 +182,13 @@ namespace System.Net
                 string? headerName = null;
 
                 // Null если конец потока.
-                string? initLine = await reader.ReadLineAsync().ConfigureAwait(false);
+                var initLine = await reader.ReadLineAsync().ConfigureAwait(false);
                 if (initLine == null)
                     return null;
 
-                string[] split = initLine.Split(' ');
-                string method = split[0];
-                string request = split[1];
+                var split = initLine.Split(' ');
+                var method = split[0];
+                var request = split[1];
 
                 var headers = new Dictionary<string, string>(5, StringComparer.InvariantCultureIgnoreCase);
                 do
@@ -203,13 +200,13 @@ namespace System.Net
                     if (line.Length == 0)
                         break;
 
-                    int ind = line.IndexOf(':', StringComparison.Ordinal);
+                    var ind = line.IndexOf(':', StringComparison.Ordinal);
                     if (ind != -1)
                     {
                         headerName = line.Substring(0, ind).Trim();
                         var value = line.Substring(ind + 1).Trim();
 
-                        if (value.Length > 0 && headers.TryGetValue(headerName, out string? val))
+                        if (value.Length > 0 && headers.TryGetValue(headerName, out var val))
                         {
                             headers[headerName] = val + "," + value;
                         }
@@ -226,7 +223,7 @@ namespace System.Net
                 } while (true);
 
                 Uri uri;
-                if (headers.TryGetValue("host", out string? host))
+                if (headers.TryGetValue("host", out var host))
                 {
                     uri = new Uri($"http://{host}{request}", UriKind.Absolute);
                 }
