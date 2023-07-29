@@ -2,3 +2,6 @@
 
 # CA1303: Не передавать литералы в качестве локализованных параметров
 dotnet_diagnostic.CA1303.severity = none
+
+# CA1849: Вызов асинхронных методов в методе async
+dotnet_diagnostic.CA1849.severity = silent

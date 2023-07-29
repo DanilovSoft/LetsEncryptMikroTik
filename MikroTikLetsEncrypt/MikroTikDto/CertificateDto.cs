@@ -2,7 +2,7 @@
 
 namespace LetsEncryptMikroTik.Core;
 
-internal sealed class CertificateDto
+public sealed class CertificateDto
 {
     [MikroTikProperty(".id")]
     public string? Id { get; set; }

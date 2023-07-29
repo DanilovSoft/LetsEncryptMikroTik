@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net6.0</TargetFramework>
+		<TargetFramework>net7.0</TargetFramework>
 		<AnalysisMode>AllEnabledByDefault</AnalysisMode>
 		<Nullable>Enable</Nullable>
 		<ApplicationIcon />
@@ -12,8 +12,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Certes" Version="3.0.3" />
-		<PackageReference Include="Danilovsoft.MikroApi" Version="1.5.0" />
+		<PackageReference Include="Certes" Version="3.0.4" />
+		<PackageReference Include="Danilovsoft.MikroApi" Version="1.6.2" />
 		<PackageReference Include="Serilog.Sinks.Console" Version="4.1.0" />
 		<PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
 	</ItemGroup>

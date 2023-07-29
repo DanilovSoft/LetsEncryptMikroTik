@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace LetsEncryptMikroTik.Core;
@@ -54,21 +55,20 @@ public sealed class Program
                 .WriteTo.Console();
         }
 
-        Log.Logger = loggerBuilder
-            .CreateLogger();
+        Log.Logger = loggerBuilder.CreateLogger();
     }
 
-    public async Task RunAsync(bool logToFile = true, InMemorySink? logSink = null)
+    public async Task RunAsync(bool logToFile = true, InMemorySink? logSink = null, CancellationToken cancellationToken = default)
     {
         CreateLogger(logSink, logToFile);
 
-        Config.ThisMachineIp = await GetLocalEndPointForAsync(mikrotikAddress, Config.MikroTikPort).ConfigureAwait(false);
+        Config.ThisMachineIp = await GetLocalEndPointForAsync(mikrotikAddress, Config.MikroTikPort, cancellationToken).ConfigureAwait(false);
 
         Log.Information("Определён IP адрес текущей машины: {ThisMachineIp}", Config.ThisMachineIp);
 
         try
         {
-            await MainAsync().ConfigureAwait(false);
+            await MainAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (LetsEncryptMikroTikException ex)
         {
@@ -93,13 +93,13 @@ public sealed class Program
     /// Использует интересный хак для определения по таблице маршрутизации какой адрес следует использовать
     /// для подключения к заданному адресу.
     /// </summary>
-    private static async Task<IPAddress> GetLocalEndPointForAsync(string host, int port)
+    private static async Task<IPAddress> GetLocalEndPointForAsync(string host, int port, CancellationToken cancellationToken)
     {
         if (!IPAddress.TryParse(host, out var remote))
         {
             var dns = new DnsEndPoint(host, port, AddressFamily.InterNetwork);
             Log.Information("Определяем IP-адрес для узла {Host}.", dns.Host);
-            var entry = await Dns.GetHostEntryAsync(dns.Host).ConfigureAwait(false);
+            var entry = await Dns.GetHostEntryAsync(dns.Host, cancellationToken).ConfigureAwait(false);
             remote = entry.AddressList[0];
         }
 
@@ -107,68 +107,58 @@ public sealed class Program
         {
             // Just picked a random port, you could make this application
             // specific if you want, but I don't think it really matters.
-            sock.Connect(new IPEndPoint(remote, 35353));
+            sock.Connect(new IPEndPoint(remote, 0));
 
-            return ((IPEndPoint)sock.LocalEndPoint).Address;
+            return ((IPEndPoint)sock.LocalEndPoint!).Address;
         }
     }
 
     /// <exception cref="LetsEncryptMikroTikException"/>
-    private async Task MainAsync()
+    private async Task MainAsync(CancellationToken cancellationToken)
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-
-        /* Русская кодировка */
-        var encoding = Encoding.GetEncoding("windows-1251");
-
         Log.Information("Подключение к микротику.");
-        using (var con = new MikroTikConnection(encoding))
+
+        var con = new MikroTikConnection(Encoding.GetEncoding("windows-1251"));
+        try
         {
             try
             {
-                //if (Config.UseSsl)
-                {
-                    //con.ConnectSsl(Config.MikroTikAddress, Config.MikroTikPort, Config.MikroTikLogin, Config.MikroTikPassword);
-                }
-                //else
-                {
-                    con.Connect(Config.MikroTikLogin, Config.MikroTikPassword, Config.MikroTikAddress, useSsl: false, Config.MikroTikPort);
-                }
+                con.Connect(Config.MikroTikLogin, Config.MikroTikPassword, Config.MikroTikAddress, useSsl: false, Config.MikroTikPort, cancellationToken);
             }
             catch (MikroApiTrapException ex) when (ex.Message == "std failure: not allowed (9)")
             {
                 Log.Error("Не удалось авторизоваться пользователю '{MikroTikLogin}'. Проверьте права пользователя на доступ к api.", Config.MikroTikLogin);
                 throw new LetsEncryptMikroTikException($"Не удалось авторизоваться пользователю '{Config.MikroTikLogin}'. Проверьте права пользователя на доступ к api.", ex);
             }
-            catch (Exception ex)
+            catch (MikroApiException ex)
             {
                 throw new LetsEncryptMikroTikException("Не удалось подключиться к микротику", ex);
             }
 
             try
             {
-                await UpdateCertificateAsync(con).ConfigureAwait(false);
+                await UpdateCertificateAsync(con, cancellationToken).ConfigureAwait(false);
             }
             catch (MikroApiTrapException ex) when (ex.Message == "not enough permissions (9)")
             {
-                var message = $"У пользователя '{Config.MikroTikLogin}' недостаточно прав в микротике. Требуются права: api, read, write, ftp.";
-                Log.Error(message);
-                throw new LetsEncryptMikroTikException(message, ex);
+                Log.Error("У пользователя '{MikroTikLogin}' недостаточно прав в микротике. Требуются права: api, read, write, ftp.", Config.MikroTikLogin);
+                throw new LetsEncryptMikroTikException($"У пользователя '{Config.MikroTikLogin}' недостаточно прав в микротике. Требуются права: api, read, write, ftp.", ex);
             }
-            finally
-            {
-                Log.Information("Отключение от микротика.");
-                con.Quit(2000);
-            }
+        }
+        finally
+        {
+            Log.Information("Отключение от микротика.");
+            await con.DisposeAsync().ConfigureAwait(false);
         }
     }
 
-    private async Task UpdateCertificateAsync(MikroTikConnection con)
+    private async Task UpdateCertificateAsync(MikroTikConnection con, CancellationToken ct)
     {
         // Валидация имени WAN-интерфейса.
-        CheckWanInterface(con);
+        CheckWanInterface(con, ct);
 
-        var mtHasOldCert = TryGetExpiredAfter(con, Config.DomainName, out var expires, out var existedCertes);
+        var mtHasOldCert = TryGetExpiredAfter(con, Config.DomainName, out var expires, out var existedCertes, ct);
         if (mtHasOldCert)
         {
             var daysLeft = (int)expires.TotalDays;
@@ -200,17 +190,12 @@ public sealed class Program
                 // Перед загрузкой сертификата убедимся что мы сможем его сохранить.
                 Log.Information("Создаём файлы в папке '{FolderName}'.", FolderName);
                 using (var certStream = File.CreateText(certFilePath))
+                using (var keyStream = File.CreateText(keyFilePath))
                 {
-                    using (var keyStream = File.CreateText(keyFilePath))
-                    {
-                        var acme = new Acme(con, Config);
-
-                        // Загрузить сертификат от Let's Encrypt.
-                        newCert = await acme.GetCertAsync().ConfigureAwait(false);
-
-                        certStream.Write(newCert.CertPem);
-                        keyStream.Write(newCert.KeyPem);
-                    }
+                    var acme = new Acme(con, Config);
+                    newCert = await acme.GetCertAsync().ConfigureAwait(false); // Загрузить сертификат от Let's Encrypt.
+                    certStream.Write(newCert.CertPem);
+                    keyStream.Write(newCert.KeyPem);
                 }
             }
             catch
@@ -235,19 +220,19 @@ public sealed class Program
         }
         
         // Загружаем сертификат и приватный ключ в микротик по FTP.
-        await UploadFtpAsync(con, certFileName, certPrivKeyFileName, newCert).ConfigureAwait(false);
+        await UploadFtpAsync(con, certFileName, certPrivKeyFileName, newCert, ct).ConfigureAwait(false);
 
-        Log.Information($"Импортируем сертификат в микротик из файла '{certFileName}'");
-        if (!TryImport(con, certFileName))
+        Log.Information("Импортируем сертификат в микротик из файла '{CertFileName}'", certFileName);
+        if (!TryImport(con, certFileName, ct))
         {
-            Log.Error($"Не удалось импортировать сертификат в микротик.");
+            Log.Error("Не удалось импортировать сертификат в микротик.");
             throw new LetsEncryptMikroTikException("Не удалось импортировать сертификат в микротик.");
         }
 
-        Log.Information($"Импортируем закрытый ключ в микротик из файла '{certPrivKeyFileName}'");
-        if (!TryImport(con, certPrivKeyFileName))
+        Log.Information("Импортируем закрытый ключ в микротик из файла '{CertPrivKeyFileName}'", certPrivKeyFileName);
+        if (!TryImport(con, certPrivKeyFileName, ct))
         {
-            Log.Error($"Не удалось импортировать закрытый ключ в микротик.");
+            Log.Error("Не удалось импортировать закрытый ключ в микротик.");
             throw new LetsEncryptMikroTikException("Не удалось импортировать закрытый ключ в микротик.");
         }
 
@@ -269,24 +254,24 @@ public sealed class Program
         RemoveFile(con, certPrivKeyFileName);
 
         // Переименовать старый сертификат.
-        RenameOldCert(con, existedCertes, newCert);
+        RenameOldCert(con, existedCertes, newCert, ct);
 
         Log.Information("Сертификат успешно установлен.");
     }
 
-    private static void RenameOldCert(MikroTikConnection con, CertificateDto[] cert, LetsEncryptCert newCert)
+    private static void RenameOldCert(MikroTikConnection con, CertificateDto[] cert, LetsEncryptCert newCert, CancellationToken ct)
     {
         // Может быть несколько сертификатор с одинаковым common-name.
         var newCertes = con.Command("/certificate print")
             .Query("fingerprint", newCert.Thumbprint)
             .Proplist(".id,name,invalid-after")
-            .ToArray<CertificateDto>();
+            .ToArray<CertificateDto>(ct);
 
         foreach (var mtNewCert in newCertes)
         {
             var newName = "new_" + mtNewCert.Name;
 
-            while (CertExists(con, newName))
+            while (CertExists(con, newName, ct))
             {
                 newName = "new_" + newName;
             }
@@ -294,21 +279,21 @@ public sealed class Program
             con.Command("/certificate set")
                 .Attribute("numbers", mtNewCert.Id)
                 .Attribute("name", newName)
-                .Send();
+                .Send(ct);
         }
 
-        RenameOldMtCerts(con, cert);
+        RenameOldMtCerts(con, cert, ct);
     }
 
-    private static void RenameOldMtCerts(MikroTikConnection con, CertificateDto[] cert)
+    private static void RenameOldMtCerts(MikroTikConnection con, CertificateDto[] cert, CancellationToken ct)
     {
         foreach (var c in cert)
         {
-            if (!c.Name.StartsWith("old_", StringComparison.Ordinal))
+            if (!c.Name!.StartsWith("old_", StringComparison.Ordinal))
             {
                 var newOldName = "old_" + c.Name;
 
-                while (CertExists(con, newOldName))
+                while (CertExists(con, newOldName, ct))
                 {
                     newOldName = "old_" + newOldName;
                 }
@@ -316,32 +301,34 @@ public sealed class Program
                 con.Command("/certificate set")
                     .Attribute("numbers", c.Id)
                     .Attribute("name", newOldName)
-                    .Send();
+                    .Send(ct);
             }
         }
     }
 
-    private static bool CertExists(MikroTikConnection con, string mtName)
+    private static bool CertExists(MikroTikConnection con, string mtName, CancellationToken cancellationToken)
     {
         var newCertes = con.Command("/certificate print")
                .Query("name", mtName)
                .Proplist(".id,name")
-               .ToArray<CertificateDto>();
+               .ToArray<CertificateDto>(cancellationToken);
 
         return newCertes.Length > 0;
     }
 
-    private void CheckWanInterface(MikroTikConnection con)
+    private void CheckWanInterface(MikroTikConnection con, CancellationToken cancellationToken)
     {
         Log.Information($"Проверяем что в микротике есть интерфейс '{Config.WanIface}'.");
 
         var ifaceId = con.Command("/interface print")
             .Query("name", Config.WanIface)
             .Proplist(".id")
-            .ScalarOrDefault<string>();
+            .ScalarOrDefault<string>(cancellationToken);
 
         if (ifaceId == null)
+        {
             throw new LetsEncryptMikroTikException($"В Микротике не найден интерфейс '{Config.WanIface}'");
+        }
     }
 
     private static void CreateDirectory(string filePath)
@@ -380,17 +367,17 @@ public sealed class Program
         } while (true);
     }
 
-    private async Task UploadFtpAsync(MikroTikConnection con, string certFileName, string certPrivKeyFileName, LetsEncryptCert cert)
+    private async Task UploadFtpAsync(MikroTikConnection con, string certFileName, string certPrivKeyFileName, LetsEncryptCert cert, CancellationToken cancellationToken)
     {
         // Включить FTP в микротике.
         EnableFtp(con, out var ftpPort, out var enabledChanged, out var allowedChanged, out var allowedAddresses);
         try
         {
             // Загружаем сертификат в микротик по FTP.
-            await UploadFileAsync(con, ftpPort, cert.CertPem, certFileName).ConfigureAwait(false);
+            await UploadFileAsync(con, ftpPort, cert.CertPem, certFileName, cancellationToken).ConfigureAwait(false);
 
             // Загружаем закрытый ключ сертификата в микротик по FTP.
-            await UploadFileAsync(con, ftpPort, cert.KeyPem, certPrivKeyFileName).ConfigureAwait(false);
+            await UploadFileAsync(con, ftpPort, cert.KeyPem, certPrivKeyFileName, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -398,7 +385,7 @@ public sealed class Program
         }
     }
 
-    private static bool TryGetExpiredAfter(MikroTikConnection con, string commonName, out TimeSpan expires, out CertificateDto[] certes)
+    private static bool TryGetExpiredAfter(MikroTikConnection con, string commonName, out TimeSpan expires, out CertificateDto[] certes, CancellationToken cancellationToken)
     {
         Log.Information($"Запрашиваем у микротика информацию о сертификате с Common-Name: '{commonName}'.");
 
@@ -406,7 +393,7 @@ public sealed class Program
         certes = con.Command("/certificate print")
             .Query("common-name", commonName)
             .Proplist(".id,name,invalid-after")
-            .ToArray<CertificateDto>();
+            .ToArray<CertificateDto>(cancellationToken);
 
         var invalidAfter = certes.Select(x => new { Cert = x, InvalidAfter = (DateTime?)DateTime.Parse(x.InvalidAfter, CultureInfo.InvariantCulture) })
             .DefaultIfEmpty()
@@ -422,12 +409,12 @@ public sealed class Program
         return false;
     }
 
-    private static bool TryImport(MikroTikConnection con, string fileName)
+    private static bool TryImport(MikroTikConnection con, string fileName, CancellationToken cancellationToken)
     {
         var filesImported = con.Command("/certificate import")
             .Attribute("file-name", fileName)
             .Attribute("passphrase", "")
-            .Scalar<int>("files-imported");
+            .Scalar<int>("files-imported", cancellationToken);
 
         return filesImported > 0;
     }
@@ -449,7 +436,7 @@ public sealed class Program
         }
     }
 
-    private async Task UploadFileAsync(MikroTikConnection con, int ftpPort, string fileContent, string fileName)
+    private async Task UploadFileAsync(MikroTikConnection con, int ftpPort, string fileContent, string fileName, CancellationToken cancellationToken)
     {
         var request = (FtpWebRequest)WebRequest.Create(new Uri($"ftp://{Config.MikroTikAddress}:{ftpPort}/{fileName}"));
         request.Method = WebRequestMethods.Ftp.UploadFile; // Перезапишет существующий.
@@ -486,7 +473,7 @@ public sealed class Program
         }
 
         // Файл в микротике будет доступен через небольшой интервал.
-        await Task.Delay(200).ConfigureAwait(false);
+        await Task.Delay(200, cancellationToken).ConfigureAwait(false);
 
         Log.Information("Проверяем что файл появился в микротике.");
 
@@ -497,12 +484,11 @@ public sealed class Program
         {
             Log.Information("Файл в микротике ещё не появился. Делаем паузу на 1 сек.");
 
-            await Task.Delay(1000).ConfigureAwait(false);
+            await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
 
             Log.Information("Ещё раз проверяем файл в микротике.");
 
             fileId = MtGetFileId(con, fileName);
-
             if (fileId == null)
             {
                 Log.Error("Файл в микротике не появился. Прекращаем попытки.");
@@ -511,7 +497,7 @@ public sealed class Program
         }
     }
 
-    private static string MtGetFileId(MikroTikConnection con, string fileName)
+    private static string? MtGetFileId(MikroTikConnection con, string fileName)
     {
         var fileId = con.Command("/file print")
                 .Query("name", fileName)
@@ -538,29 +524,6 @@ public sealed class Program
             .Attribute("message", message)
             .Send();
     }
-
-    //private void RemoveExisted(MikroTikConnection con, string commonName)
-    //{
-    //    Log.Information($"Запрашиваем у микротика сертификат с Common-Name: '{commonName}'.");
-
-    //    // Может быть несколько сертификатор с одинаковым common-name.
-    //    string[] invalidAfterRaw = con.Command("/certificate print")
-    //        .Query("common-name", commonName)
-    //        .Proplist(".id")
-    //        .ScalarArray<string>();
-
-    //    if (invalidAfterRaw.Length > 0)
-    //    {
-    //        Log.Information($"Удаляем существующий сертификат из микротика.");
-
-    //        foreach (string id in invalidAfterRaw)
-    //        {
-    //            con.Command("/certificate remove")
-    //                .Attribute(".id", id)
-    //                .Send();
-    //        }
-    //    }
-    //}
 
     private void EnableFtp(MikroTikConnection con, out int ftpPort, out bool enabledChanged, out bool allowedChanged, out string allowedAddresses)
     {

@@ -2,11 +2,12 @@
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
-		<TargetFramework>net6.0-windows</TargetFramework>
+		<TargetFramework>net7.0-windows</TargetFramework>
 		<AnalysisMode>AllEnabledByDefault</AnalysisMode>
 		<UseWindowsForms>true</UseWindowsForms>
 		<RootNamespace>LetsEncryptMikroTik</RootNamespace>
 		<AssemblyName>LetsEncryptMikroTik</AssemblyName>
+		<InvariantGlobalization>true</InvariantGlobalization>
 	</PropertyGroup>
 
 	<!--<ItemGroup>

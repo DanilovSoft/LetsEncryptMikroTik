@@ -112,25 +112,23 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
         try
         {
             using (client)
+            using (var sslStream = new SslStream(client.GetStream()))
             {
-                using (var sslStream = new SslStream(client.GetStream()))
+                var sslOptions = new SslServerAuthenticationOptions
                 {
-                    var sslOptions = new SslServerAuthenticationOptions
+                    ApplicationProtocols = new List<SslApplicationProtocol>
                     {
-                        ApplicationProtocols = new List<SslApplicationProtocol>
-                        {
-                            new SslApplicationProtocol("acme-tls/1")
-                        },
-                        ServerCertificate = _certificate
-                    };
+                        new SslApplicationProtocol("acme-tls/1")
+                    },
+                    ServerCertificate = _certificate
+                };
 
-                    await sslStream.AuthenticateAsServerAsync(sslOptions, _cts.Token).ConfigureAwait(false);
+                await sslStream.AuthenticateAsServerAsync(sslOptions, _cts.Token).ConfigureAwait(false);
 
-                    // Дополнительная пауза перед отключением.
-                    await Task.Delay(1000).ConfigureAwait(false);
+                // Дополнительная пауза перед отключением.
+                await Task.Delay(1000).ConfigureAwait(false);
 
-                    _tcs.TrySetResult(0);
-                }
+                _tcs.TrySetResult(0);
             }
         }
         catch (OperationCanceledException)
@@ -143,8 +141,8 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
         }
         catch (Exception ex)
         {
-            Debug.Assert(false);
-            Debug.WriteLine(ex);
+            //Debug.Assert(false);
+            //Debug.WriteLine(ex);
         }
     }
 
@@ -152,7 +150,6 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
     {
         _cts.Cancel();
         _listener.Stop();
-
         _certificate.Dispose();
     }
 }
