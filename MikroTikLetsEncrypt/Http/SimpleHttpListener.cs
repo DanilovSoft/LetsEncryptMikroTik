@@ -8,38 +8,20 @@ namespace System.Net;
 
 internal sealed class SimpleHttpListener : IDisposable
 {
-    private const int PreferedPort = 80;
     private readonly List<(TcpClient, Task)> _clients = new();
     private readonly TaskCompletionSource<int> _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    public int ListenPort { get; internal set; }
     private readonly TcpListener _listener;
     private readonly Channel<MyHttpListenerContext> _channel;
-    private readonly IPAddress _address;
+    private readonly IPAddress _localAddress;
     private volatile bool _stopping;
+    private int? _listenPort;
 
-    public SimpleHttpListener(IPAddress thisMachineIp)
+    public SimpleHttpListener(IPAddress localAddress)
     {
-        _address = thisMachineIp;
-        var prefPort = PreferedPort;
-        var started = false;
-        do
-        {
-            var listenPort = FindAvailablePort(thisMachineIp, prefPort);
-            var tcp = new TcpListener(thisMachineIp, listenPort); // TODO задать порт 0.
-            try
-            {
-                tcp.Start();
-            }
-            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
-            {
-                prefPort = listenPort + 1;
-                continue;
-            }
-            started = true;
-            ListenPort = listenPort;
-            _listener = tcp;
-            
-        } while (!started);
+        ArgumentNullException.ThrowIfNull(localAddress);
+
+        _localAddress = localAddress;
+        _listener = new TcpListener(localAddress, 0);
 
         _channel = Channel.CreateUnbounded<MyHttpListenerContext>(new UnboundedChannelOptions
         {
@@ -49,7 +31,58 @@ internal sealed class SimpleHttpListener : IDisposable
         });
     }
 
+    public int ListenPort => _listenPort ?? throw new InvalidOperationException("Сначала нужно вызвать Listen");
+
+    public void Listen()
+    {
+        _listener.Start();
+        _listenPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
+    }
+
+    public async Task<bool> StopAsync(TimeSpan timeSpan)
+    {
+        (TcpClient, Task)[] copy;
+        lock (_clients)
+        {
+            if (!_stopping)
+            {
+                _stopping = true;
+                copy = _clients.ToArray();
+            }
+            else
+                return true;
+        }
+
+        // Больше не принимать новых соединений.
+        _listener.Stop();
+        _channel.Writer.TryComplete();
+
+        var whenAll = Task.WhenAll(copy.Select(x => x.Item2));
+
+        if (await Task.WhenAny(whenAll, Task.Delay(timeSpan)).ConfigureAwait(false) != whenAll)
+        {
+            foreach (var item in copy)
+            {
+                item.Item1.Client.Shutdown(SocketShutdown.Both);
+            }
+        }
+
+        await _tcs.Task.ConfigureAwait(false);
+
+        // TODO
+        return true;
+    }
+
+    public void Dispose()
+    {
+        if (!_stopping)
+        {
+            _listener.Stop();
+        }
+    }
+
     // Находит не занятый порт.
+    [Obsolete]
     private static int FindAvailablePort(IPAddress address, int prefPort)
     {
         // Evaluate current system tcp connections. This is the same information provided
@@ -225,52 +258,10 @@ internal sealed class SimpleHttpListener : IDisposable
             }
             else
             {
-                uri = new Uri($"http://{_address}:{ListenPort}{request}", UriKind.Absolute);
+                uri = new Uri($"http://{_localAddress}:{ListenPort}{request}", UriKind.Absolute);
             }
 
             return new MyHttpListenerRequest(method, uri, headers);
-        }
-    }
-
-    public async Task<bool> StopAsync(TimeSpan timeSpan)
-    {
-        (TcpClient, Task)[] copy;
-        lock (_clients)
-        {
-            if (!_stopping)
-            {
-                _stopping = true;
-                copy = _clients.ToArray();
-            }
-            else
-                return true;
-        }
-
-        // Больше не принимать новых соединений.
-        _listener.Stop();
-        _channel.Writer.TryComplete();
-
-        var whenAll = Task.WhenAll(copy.Select(x => x.Item2));
-
-        if(await Task.WhenAny(whenAll, Task.Delay(timeSpan)).ConfigureAwait(false) != whenAll)
-        {
-            foreach (var item in copy)
-            {
-                item.Item1.Client.Shutdown(SocketShutdown.Both);
-            }
-        }
-
-        await _tcs.Task.ConfigureAwait(false);
-
-        // TODO
-        return true;
-    }
-
-    public void Dispose()
-    {
-        if (!_stopping)
-        {
-            _listener.Stop();
         }
     }
 }

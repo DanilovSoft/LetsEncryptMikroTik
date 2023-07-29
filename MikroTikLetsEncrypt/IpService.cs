@@ -14,11 +14,6 @@ internal struct IpService
     [MikroTikProperty("address")]
     public string Address { get; set; }
 
-    public string[] Addresses { get; private set; }
-
-    [OnDeserialized]
-    private void OnDeserialized(StreamingContext _)
-    {
-        Addresses = Address?.Split(',');
-    }
+    private string[]? _addresses;
+    public string[] Addresses => _addresses ??= Address.Split(',', StringSplitOptions.TrimEntries);
 }

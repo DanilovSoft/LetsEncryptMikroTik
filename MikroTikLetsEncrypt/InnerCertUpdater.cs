@@ -29,8 +29,8 @@ internal sealed class InnerCertUpdater
     /// <exception cref="LetsEncryptMikroTikException"/>
     public async Task UpdateCertificateAsync(CancellationToken cancellationToken = default)
     {
-        // Валидация имени WAN-интерфейса.
-        CheckWanInterface(cancellationToken);
+        CheckWanInterface(cancellationToken); // Валидация имени WAN-интерфейса.
+        CheckFtpAccess();
 
         var mtHasOldCert = TryGetExpiredAfter(out var expires, out var existedCertes, cancellationToken);
         if (mtHasOldCert)
@@ -38,11 +38,11 @@ internal sealed class InnerCertUpdater
             var daysLeft = (int)expires.TotalDays;
             if (daysLeft > _options.ReplaceCertOnDaysLessThan && !_options.Force)
             {
-                _logger.LogInformation("В микротике есть ещё актуальный сертификат который истекает через {DaysLeft} {DaysLeft}. Завершаем работу.", daysLeft, Days(daysLeft));
+                _logger.LogInformation("В микротике есть ещё актуальный сертификат который истекает через {DaysLeft} {DaysWord}; завершаем работу", daysLeft, Days(daysLeft));
                 return;
             }
             
-            _logger.LogInformation("В микротике уже есть сертификат с таким Common-Name который истекает через {DaysLeft} {DaysLeft}.", daysLeft, Days(daysLeft));
+            _logger.LogInformation("В микротике уже есть сертификат с таким Common-Name который истекает через {DaysLeft} {DaysWord}", daysLeft, Days(daysLeft));
         }
 
         LetsEncryptCert newCert;
@@ -95,28 +95,25 @@ internal sealed class InnerCertUpdater
         _logger.LogInformation("Импортируем сертификат в микротик из файла '{CertFileName}'", certFileName);
         if (!TryImport(certFileName, cancellationToken))
         {
-            _logger.LogError("Не удалось импортировать сертификат в микротик");
-            throw new LetsEncryptMikroTikException("Не удалось импортировать сертификат в микротик.");
+            _logger.LogError("По неизвестной причине микротик не импортировал файл сертификата");
+            throw new LetsEncryptMikroTikException("По неизвестной причине микротик не импортировал файл сертификата");
         }
 
         _logger.LogInformation("Импортируем закрытый ключ в микротик из файла '{CertPrivKeyFileName}'", certPrivKeyFileName);
         if (!TryImport(certPrivKeyFileName, cancellationToken))
         {
-            _logger.LogError("Не удалось импортировать закрытый ключ в микротик");
-            throw new LetsEncryptMikroTikException("Не удалось импортировать закрытый ключ в микротик.");
+            _logger.LogError("По неизвестной причине микротик не импортировал файл закрытого ключа сертификата");
+            throw new LetsEncryptMikroTikException("По неизвестной причине микротик не импортировал файл закрытого ключа сертификата");
         }
 
         if (mtHasOldCert && expires.TotalDays > 1)
         {
             var daysValid = (int)expires.TotalDays;
-
-            // Оставляем сообщение в логах микротика.
-            AddWarning($"Был добавлен новый сертификат '{_options.DomainName}'. Старый сертификат будет актуален ещё {daysValid} {Days(daysValid)}");
+            AddWarning($"Был добавлен новый сертификат '{_options.DomainName}'. Старый сертификат будет актуален ещё {daysValid} {Days(daysValid)}"); // Оставляем сообщение в логах микротика.
         }
         else
         {
-            // Оставляем сообщение в логах микротика.
-            AddWarning($"Был добавлен новый сертификат '{_options.DomainName}'");
+            AddWarning($"Был добавлен новый сертификат '{_options.DomainName}'"); // Оставляем сообщение в логах микротика.
         }
 
         // Удаляем файлы из микротика.
@@ -239,6 +236,19 @@ internal sealed class InnerCertUpdater
         }
     }
 
+    private void CheckFtpAccess()
+    {
+        EnableFtp(out var ftpPort, out var enabledChanged, out var allowedChanged, out var allowedAddresses); // Включить FTP в микротике.
+        try
+        {
+            CheckFtpLogin(ftpPort);
+        }
+        finally
+        {
+            RestoreFtp(enabledChanged, allowedChanged, allowedAddresses);
+        }
+    }
+
     private bool TryImport(string fileName, CancellationToken cancellationToken)
     {
         var filesImported = _connection.Command("/certificate import")
@@ -297,7 +307,7 @@ internal sealed class InnerCertUpdater
             if (ftpService.Disabled)
             {
                 enabledChanged = true;
-                _logger.LogWarning("В микротике выключен FTP. Временно включаем его");
+                _logger.LogWarning("В микротике выключен FTP; временно включаем его");
             }
             else
                 enabledChanged = false;
@@ -306,7 +316,7 @@ internal sealed class InnerCertUpdater
             if (!connectionAllowed)
             {
                 allowedChanged = true;
-                _logger.LogWarning("В микротике доступ к FTP с адреса {ThisMachineIp} не разрешён. Временно разрешаем", _options.LocalIP);
+                _logger.LogWarning("В микротике доступ к FTP с адреса {ThisMachineIp} не разрешён; временно разрешаем", _options.LocalIP);
                 address += $",{_options.LocalIP}/32";
             }
             else
@@ -335,66 +345,67 @@ internal sealed class InnerCertUpdater
 
     private void RestoreFtp(bool enabledChanged, bool allowedChanged, string allowedAddresses)
     {
-        if (enabledChanged || allowedChanged)
+        if (!enabledChanged && !allowedChanged)
         {
-            var com = _connection.Command("/ip service set")
+            return;
+        }
+
+        var com = _connection.Command("/ip service set")
             .Attribute("numbers", "ftp");
 
-            if (enabledChanged)
-            {
-                _logger.LogInformation("Выключаем FTP в микротике");
-                com.Attribute("disabled", "true");
-            }
-
-            if (allowedChanged)
-            {
-                _logger.LogInformation("Убираем IP {ThisMachineIp} из разрешённых для FTP в микротике", _options.LocalIP);
-                com.Attribute("address", allowedAddresses);
-            }
-            com.Send();
+        if (enabledChanged)
+        {
+            _logger.LogInformation("Выключаем FTP в микротике");
+            com.Attribute("disabled", "true");
         }
+
+        if (allowedChanged)
+        {
+            _logger.LogInformation("Убираем IP {LocalIP} из разрешённых для FTP в микротике", _options.LocalIP);
+            com.Attribute("address", allowedAddresses);
+        }
+        com.Send();
     }
 
     private async Task UploadFileAsync(int ftpPort, string fileContent, string fileName, CancellationToken cancellationToken)
     {
 #pragma warning disable SYSLIB0014 // Тип или член устарел
-        var request = (FtpWebRequest)WebRequest.Create(new Uri($"ftp://{_options.MikroTikAddress}:{ftpPort}/{fileName}"));
+        var ftpRequest = (FtpWebRequest)WebRequest.Create(new Uri($"ftp://{_options.MikroTikAddress}:{ftpPort}/{fileName}"));
 #pragma warning restore SYSLIB0014 // Тип или член устарел
-        request.Method = WebRequestMethods.Ftp.UploadFile; // Перезапишет существующий.
-        request.Proxy = null;
-        request.UseBinary = true;
-        request.EnableSsl = false;
-        request.UsePassive = true;
-        request.Credentials = new NetworkCredential(_options.FtpLogin, _options.FtpPassword);
+        ftpRequest.Method = WebRequestMethods.Ftp.UploadFile; // Перезапишет существующий.
+        ftpRequest.Proxy = null;
+        ftpRequest.UseBinary = true;
+        ftpRequest.EnableSsl = false;
+        ftpRequest.UsePassive = true;
+        ftpRequest.Credentials = new NetworkCredential(_options.FtpLogin, _options.FtpPassword);
 
         _logger.LogInformation("Отправляем файл '{FileName}' в микротик по FTP с заменой файла если такой существует", fileName);
 
         using (var fileStream = new MemoryStream(Encoding.ASCII.GetBytes(fileContent)))
         {
-            Stream stream;
+            Stream ftpRequestStream;
             try
             {
-                stream = request.GetRequestStream();
+                ftpRequestStream = ftpRequest.GetRequestStream();
             }
             catch (WebException ex)
             {
                 if (ex.Response is FtpWebResponse response)
                 {
                     if (response.StatusCode == FtpStatusCode.NotLoggedIn)
-                        throw new WebException("Не удалось авторизоваться на FTP (не верный пароль?).", ex);
+                        throw new LetsEncryptMikroTikException("Не удалось авторизоваться на FTP (неверный пароль?)", ex);
                 }
-                throw new WebException("Ошибка доступа к FTP микротика.", ex);
+                throw new LetsEncryptMikroTikException("Ошибка доступа к FTP микротика", ex);
             }
 
-            using (stream)
+            using (ftpRequestStream)
             {
-                fileStream.CopyTo(stream);
+                fileStream.CopyTo(ftpRequestStream);
                 fileStream.Flush();
             }
         }
 
-        // Файл в микротике будет доступен через небольшой интервал.
-        await Task.Delay(200, cancellationToken).ConfigureAwait(false);
+        await Task.Delay(200, cancellationToken).ConfigureAwait(false); // Файл в микротике будет доступен через небольшой интервал.
 
         _logger.LogInformation("Проверяем что файл появился в микротике");
 
@@ -412,9 +423,29 @@ internal sealed class InnerCertUpdater
             fileId = MtGetFileId(fileName);
             if (fileId == null)
             {
-                _logger.LogError("Файл в микротике не появился. Прекращаем попытки");
-                throw new LetsEncryptMikroTikException("Не удалось загрузить файл через FTP.");
+                _logger.LogError("Файл в микротике не появился; прекращаем попытки");
+                throw new LetsEncryptMikroTikException("Не удалось загрузить файл через FTP");
             }
+        }
+    }
+
+    private void CheckFtpLogin(int ftpPort)
+    {
+        try
+        {
+#pragma warning disable SYSLIB0014 // Тип или член устарел
+            var request = (FtpWebRequest)WebRequest.Create(new Uri($"ftp://{_options.MikroTikAddress}:{ftpPort}"));
+#pragma warning restore SYSLIB0014 // Тип или член устарел
+            request.Credentials = new NetworkCredential(_options.FtpLogin, _options.FtpPassword);
+            request.Method = WebRequestMethods.Ftp.ListDirectory;
+
+            using var response = (FtpWebResponse)request.GetResponse();
+            _logger.LogInformation("FTP server is accessible; Status: {StatusDescription}", response.StatusDescription?.Trim());
+        }
+        catch (WebException ex)
+        {
+            _logger.LogError("FTP server is not accessible. Error: {Message}", ex.Message);
+            throw new LetsEncryptMikroTikException($"FTP server is not accessible. Error: {ex.Message}", ex);
         }
     }
 

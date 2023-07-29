@@ -20,6 +20,10 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
 
     public AlpnChallenge(IPAddress localAddress, string identifier, string challengeTokenValue)
     {
+        ArgumentNullException.ThrowIfNull(localAddress);
+        ArgumentNullException.ThrowIfNull(identifier);
+        ArgumentException.ThrowIfNullOrEmpty(challengeTokenValue);
+
         _identifier = identifier;
         _challengeTokenValue = challengeTokenValue;
         _certificate = PrepareChallenge();
@@ -44,12 +48,6 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
         _listener.BeginAcceptTcpClient(OnConnected, null);
     }
 
-    public Task RunAsync()
-    {
-        Start();
-        return Task.CompletedTask;
-    }
-
     private X509Certificate2 PrepareChallenge()
     {
         try
@@ -63,12 +61,8 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
                 HashAlgorithmName.SHA256,
                 RSASignaturePadding.Pkcs1);
 
-            // TODO: SHA256.HashData()
-            using var sha = SHA256.Create();
-            var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(_challengeTokenValue));
-            request.CertificateExtensions.Add(
-                new X509Extension(
-                    new AsnEncodedData("1.3.6.1.5.5.7.1.31", new DerOctetString(hash).GetDerEncoded()), true));
+            var hash = HashChallenge(_challengeTokenValue);
+            request.CertificateExtensions.Add(new X509Extension(new AsnEncodedData("1.3.6.1.5.5.7.1.31", new DerOctetString(hash).GetDerEncoded()), true));
 
             var sanBuilder = new SubjectAlternativeNameBuilder();
             sanBuilder.AddDnsName(_identifier);
@@ -88,6 +82,13 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
             //_log.Error("Unable to activate TcpClient, this may be because of insufficient rights or another application using port 443");
             throw;
         }
+    }
+
+    private static byte[] HashChallenge(string challenge)
+    {
+        Span<byte> decodedChallenge = stackalloc byte[256];
+        var len = Encoding.UTF8.GetBytes(challenge, decodedChallenge);
+        return SHA256.HashData(decodedChallenge[0..len]);
     }
 
     private void OnConnected(IAsyncResult asyncResult)

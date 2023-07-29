@@ -24,6 +24,7 @@ internal sealed class HttpChallenge : IChallenge, IDisposable
         _keyAuthString = keyAuthString;
         _logger = logger;
         _listener = new SimpleHttpListener(localAddress);
+        _listener.Listen();
     }
 
     public void Start()
@@ -64,14 +65,12 @@ internal sealed class HttpChallenge : IChallenge, IDisposable
                     _logger.LogInformation("Отправлен ключ подтверждения");
                 }
             }
-            catch (HttpListenerClosedException)
+            catch (HttpListenerClosedException) // Грациозная остановка.
             {
-                // Грациозная остановка.
                 break;
             }
-            catch when (_stopRequired)
+            catch when (_stopRequired) // Грязная остановка.
             {
-                // Грязная остановка.
                 break;
             }
         }
