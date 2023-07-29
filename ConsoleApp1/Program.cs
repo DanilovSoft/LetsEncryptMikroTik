@@ -3,11 +3,11 @@ using System;
 using System.IO;
 using LetsEncryptMikroTik.Core;
 
-namespace ConsoleApp1;
+namespace LetsEncryptMikroTik;
 
 class Program
 {
-    static int Main(string[] args)
+    static int Main()
     {
         var configurationBuilder = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
@@ -15,9 +15,9 @@ class Program
             .AddJsonFile("appsettings.local.json", optional: true);
 
         var configuration = configurationBuilder.Build();
-        var config = configuration.Get<ConfigClass>();
+        var config = configuration.Get<Options>();
 
-        var p = new LetsEncryptMikroTik.Core.Program(config);
+        var p = new Core.Program(config);
 
         try
         {
@@ -27,7 +27,7 @@ class Program
         {
             return 1;
         }
-        
+
         if (Environment.UserInteractive)
         {
             // Press Any Key

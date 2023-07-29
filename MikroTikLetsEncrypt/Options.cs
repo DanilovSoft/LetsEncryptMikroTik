@@ -2,21 +2,20 @@
 
 namespace LetsEncryptMikroTik.Core;
 
-public class ConfigClass
+public sealed class Options
 {
-    // The HTTP-01 challenge can only be done on port 80.
-    internal const int ListenPort = 443;
-    public int MikroTikPort { get; init; }
+    internal const int ListenPort = 443; // The HTTP-01 challenge can only be done on port 80.
+    public required string MikroTikAddress { get; init; }
+    public required int MikroTikPort { get; init; }
+    public required string DomainName { get; init; }
+    public required string MikroTikLogin { get; init; }
+    public required string WanIface { get; init; }
+    public required LeUri LetsEncryptAddress { get; init; }
     public string? FtpLogin { get; init; }
     public string? FtpPassword { get; init; }
-    public string? MikroTikLogin { get; init; }
     public string? MikroTikPassword { get; init; }
-    public string? DomainName { get; init; }
     public string? Email { get; init; }
-    public string? WanIface { get; init; }
     public bool Force { get; init; }
-    public LeUri? LetsEncryptAddress { get; init; }
-    public string? MikroTikAddress { get; init; }
     internal int ReplaceCertOnDaysLessThan { get; init; } = 60;
     public bool SaveFile { get; init; }
     public bool UseAlpn { get; init; }

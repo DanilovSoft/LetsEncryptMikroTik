@@ -8,21 +8,26 @@ using Certes;
 using Certes.Acme;
 using Certes.Acme.Resource;
 using DanilovSoft.MikroApi;
-using Serilog;
+using Microsoft.Extensions.Logging;
 
 namespace LetsEncryptMikroTik.Core;
 
 internal sealed class Acme
 {
-    private readonly MikroTikConnection _mtCon;
-    private readonly ConfigClass _config;
+    private readonly MikroTikConnection _connection;
+    private readonly Options _config;
+    private readonly ILogger _logger;
     private readonly string _domainName;
     private readonly IPAddress _thisMachineIp;
     private readonly LeUri _letsEncryptAddress;
 
-    public Acme(MikroTikConnection connection, ConfigClass config)
+    public Acme(MikroTikConnection connection, Options config, ILogger logger)
     {
-        _mtCon = connection;
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(config);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        _connection = connection;
 
         if (string.IsNullOrEmpty(config.DomainName))
             throw new ArgumentOutOfRangeException(nameof(config), "Имя домена не может быть пустым");
@@ -32,6 +37,7 @@ internal sealed class Acme
         _letsEncryptAddress = config.LetsEncryptAddress ?? throw new ArgumentOutOfRangeException(nameof(config), "LetsEncryptAddress не может быть пустым");
 
         _config = config;
+        _logger = logger;
     }
 
     /// <summary>
@@ -49,49 +55,44 @@ internal sealed class Acme
             // Load the saved account key
             var accountKey = KeyFactory.FromPem(accountPemKey);
             acme = new AcmeContext(_letsEncryptAddress, accountKey);
-            Log.Information("Авторизация в Let's Encrypt.");
+            _logger.LogInformation("Авторизация в Let's Encrypt");
             account = await acme.Account().ConfigureAwait(false);
         }
         else
         {
             acme = new AcmeContext(_letsEncryptAddress);
-            Log.Information("Авторизация в Let's Encrypt.");
+            _logger.LogInformation("Авторизация в Let's Encrypt");
             account = await acme.NewAccount(_config.Email, termsOfServiceAgreed: true).ConfigureAwait(false);
             // Save the account key for later use
             //string pemKey = acme.AccountKey.ToPem();
         }
 
-        Log.Information("Заказываем новый сертификат.");
+        _logger.LogInformation("Заказываем новый сертификат");
         var order = await acme.NewOrder(new[] { _config.DomainName }).ConfigureAwait(false);
 
         // Get the token and key authorization string.
-        Log.Information("Получаем способы валидации заказа.");
+        _logger.LogInformation("Получаем способы валидации заказа");
         var authz = (await order.Authorizations().ConfigureAwait(false)).First();
 
         if (_config.UseAlpn)
         {
-            Log.Information("Выбираем TLS-ALPN-01 способ валидации.");
-            var challenge = await authz.TlsAlpn().ConfigureAwait(false);
-            if (challenge is null)
-            {
-                throw new InvalidOperationException("No TLS ALPN challenge available");
-            }
-
+            _logger.LogInformation("Выбираем TLS-ALPN-01 способ валидации");
+            var challenge = await authz.TlsAlpn().ConfigureAwait(false) ?? throw new InvalidOperationException("No TLS ALPN challenge available");
             var keyAuthz = challenge.KeyAuthz;
-            var token = challenge.Token;
+            _ = challenge.Token;
 
             await ChallengeAlpnAsync(challenge, keyAuthz).ConfigureAwait(false);
         }
         else
         {
-            Log.Information("Выбираем HTTP-01 способ валидации.");
+            _logger.LogInformation("Выбираем HTTP-01 способ валидации");
             var challenge = await authz.Http().ConfigureAwait(false);
             var keyAuthz = challenge.KeyAuthz;
 
             await HttpChallengeAsync(challenge, keyAuthz).ConfigureAwait(false);
         }
 
-        Log.Information("Загружаем сертификат.");
+        _logger.LogInformation("Загружаем сертификат");
 
         // Download the certificate once validation is done
         var privateKey = KeyFactory.NewKey(KeyAlgorithm.RS256);
@@ -104,8 +105,7 @@ internal sealed class Acme
             Locality = "Toronto",
             Organization = "Certes",
             OrganizationUnit = "Dev",
-        }, privateKey)
-            .ConfigureAwait(false);
+        }, privateKey).ConfigureAwait(false);
 
         // Export full chain certification.
         var certPem = cert.ToPem();
@@ -145,21 +145,20 @@ internal sealed class Acme
     private async Task ChallengeAsync(IChallenge challenge, IChallengeContext httpChallenge)
     {
         // Запустить asp net.
-        Log.Information("Запускаем веб-сервер.");
+        _logger.LogInformation("Запускаем веб-сервер");
         challenge.Start();
 
         var mtNatId = MtAddDstNatRule(dstPort: challenge.PublicPort, toPorts: challenge.ListenPort);
         var mtFilterId = MtAllowPortFilter(dstPort: challenge.ListenPort, publicPort: challenge.PublicPort);
         var mtMangleId = MtAllowMangleRule(dstPort: challenge.ListenPort);
 
-        // Правило в микротике начинает работать не мгновенно.
-        await Task.Delay(2000).ConfigureAwait(false);
+        await Task.Delay(2000).ConfigureAwait(false); // Правило в микротике начинает работать не мгновенно.
 
         //Challenge status;
         try
         {
             // Ask the ACME server to validate our domain ownership.
-            Log.Information("Информируем Let's Encrypt что мы готовы пройти валидацию.");
+            _logger.LogInformation("Информируем Let's Encrypt что мы готовы пройти валидацию");
             var status = await httpChallenge.Validate().ConfigureAwait(false);
 
             var waitWithSem = true;
@@ -167,40 +166,40 @@ internal sealed class Acme
             {
                 if (waitWithSem)
                 {
-                    Log.Information("Ожидаем 20 сек. входящий HTTP запрос.");
+                    _logger.LogInformation("Ожидаем 20 сек входящий HTTP запрос");
                     var t = await Task.WhenAny(Task.Delay(20_000), challenge.Completion).ConfigureAwait(false);
 
                     if (t == challenge.Completion)
                     {
                         waitWithSem = false;
-                        Log.Information("Успешно выполнили входящий запрос. Ждём 15 сек. перед запросом сертификата.");
+                        _logger.LogInformation("Успешно выполнили входящий запрос; ждём 15 сек перед запросом сертификата");
                         await Task.Delay(15_000).ConfigureAwait(false);
                     }
                     else
                     // Таймаут.
                     {
                         waitWithSem = false;
-                        Log.Information("Запрос ещё не поступил. Дополнительно ожидаем ещё 5 сек.");
+                        _logger.LogInformation("Запрос ещё не поступил; дополнительно ожидаем ещё 5 сек");
                         await Task.Delay(5000).ConfigureAwait(false);
                     }
                 }
                 else
                 {
-                    Log.Information("Заказ всё ещё в статусе Pending. Делаем дополнительную паузу на 5 сек.");
+                    _logger.LogInformation("Заказ всё ещё в статусе Pending; делаем дополнительную паузу на 5 сек");
                     await Task.Delay(5_000).ConfigureAwait(false);
                 }
 
-                Log.Information("Запрашиваем статус нашего заказа.");
+                _logger.LogInformation("Запрашиваем статус нашего заказа");
                 status = await httpChallenge.Resource().ConfigureAwait(false);
             }
 
             if (status.Status == ChallengeStatus.Valid)
             {
-                Log.Information("Статус заказа: Valid. Загружаем сертификат.");
+                _logger.LogInformation("Статус заказа: Valid; загружаем сертификат");
             }
             else
             {
-                Log.Error($"Статус заказа: {status.Status}");
+                _logger.LogError("Статус заказа: {Status}", status.Status);
                 throw new LetsEncryptMikroTikException($"Статус заказа: {status.Status}. Ошибка: {status.Error.Detail}");
             }
         }
@@ -215,9 +214,9 @@ internal sealed class Acme
 
     private string MtAllowPortFilter(int dstPort, int publicPort)
     {
-        Log.Information($"Создаём правило разрешающее соединения на {publicPort} порт в фаерволе микротика.");
+        _logger.LogInformation("Создаём правило разрешающее соединения на {PublicPort} порт в фаерволе микротика", publicPort);
 
-        var id = _mtCon.Command("/ip firewall filter add")
+        var id = _connection.Command("/ip firewall filter add")
             .Attribute("chain", "forward")
             .Attribute("dst-address", _thisMachineIp.ToString())
             .Attribute("protocol", "tcp")
@@ -233,9 +232,9 @@ internal sealed class Acme
 
     private string MtAllowMangleRule(int dstPort)
     {
-        Log.Information("Создаём правило мангла для прямой маршрутизации порта {DstPort}.", dstPort);
+        _logger.LogInformation("Создаём правило мангла для прямой маршрутизации порта {DstPort}", dstPort);
 
-        var id = _mtCon.Command("/ip firewall mangle add")
+        var id = _connection.Command("/ip firewall mangle add")
             .Attribute("chain", "prerouting")
             .Attribute("src-address", _thisMachineIp.ToString())
             .Attribute("protocol", "tcp")
@@ -251,10 +250,11 @@ internal sealed class Acme
 
     private void ClosePort(string ruleId)
     {
-        Log.Information("Удаляем созданное правило фаервола.");
+        _logger.LogInformation("Удаляем созданное правило фаервола");
 
         // Удалить правило.
-        _mtCon.Command("/ip firewall filter remove")
+        _connection
+            .Command("/ip firewall filter remove")
             .Attribute(".id", ruleId)
             .Send();
     }
@@ -264,9 +264,9 @@ internal sealed class Acme
     /// </summary>
     private string MtAddDstNatRule(int dstPort, int toPorts)
     {
-        Log.Information("Создаём правило NAT в микротике.");
+        _logger.LogInformation("Создаём правило NAT в микротике");
 
-        var ruleId = _mtCon.Command("/ip firewall nat add")
+        var ruleId = _connection.Command("/ip firewall nat add")
             .Attribute("chain", "dstnat")
             .Attribute("protocol", "tcp")
             .Attribute("dst-port", $"{dstPort}")
@@ -283,20 +283,22 @@ internal sealed class Acme
 
     private void RemoveNatRule(string ruleId)
     {
-        Log.Information("Удаляем созданное правило NAT.");
+        _logger.LogInformation("Удаляем созданное правило NAT");
 
         // Удалить правило.
-        _mtCon.Command("/ip firewall nat remove")
+        _connection
+            .Command("/ip firewall nat remove")
             .Attribute(".id", ruleId)
             .Send();
     }
 
     private void RemoveMangleRule(string ruleId)
     {
-        Log.Information("Удаляем созданное правило мангла.");
+        _logger.LogInformation("Удаляем созданное правило мангла");
 
         // Удалить правило.
-        _mtCon.Command("/ip firewall mangle remove")
+        _connection
+            .Command("/ip firewall mangle remove")
             .Attribute(".id", ruleId)
             .Send();
     }

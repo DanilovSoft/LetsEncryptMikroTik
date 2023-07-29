@@ -5,3 +5,9 @@ dotnet_diagnostic.CA1303.severity = none
 
 # CA1849: Вызов асинхронных методов в методе async
 dotnet_diagnostic.CA1849.severity = silent
+
+# CA1031: Не перехватывать исключения общих типов
+dotnet_diagnostic.CA1031.severity = silent
+
+# CA1848: Использовать делегаты LoggerMessage
+dotnet_diagnostic.CA1848.severity = silent

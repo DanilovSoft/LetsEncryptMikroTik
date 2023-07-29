@@ -17,7 +17,7 @@ internal sealed class HttpChallenge : IChallenge, IDisposable
 
     public int PublicPort => 80; // Не менять.
 
-    public HttpChallenge(ConfigClass config, string keyAuthString)
+    public HttpChallenge(Options config, string keyAuthString)
     {
         _keyAuthString = keyAuthString;
         _listener = new SimpleHttpListener(config.ThisMachineIp);

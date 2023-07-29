@@ -5,9 +5,9 @@ VisualStudioVersion = 17.0.31912.275
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LetsEncryptMikroTik.Core", "MikroTikLetsEncrypt\LetsEncryptMikroTik.Core.csproj", "{ED69EEB3-0F0D-47D5-9C98-EB357BEAF37B}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Console", "ConsoleApp1\Console.csproj", "{857E959D-BA38-4314-A272-072FA092B9F5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LetsEncryptMikroTik.CLI", "ConsoleApp1\LetsEncryptMikroTik.CLI.csproj", "{857E959D-BA38-4314-A272-072FA092B9F5}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WinFormCoreGui", "WinFormCoreGui\WinFormCoreGui.csproj", "{0EAFE758-64A2-4745-9811-6142C543560C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LetsEncryptMikroTik.WinForm", "WinFormCoreGui\LetsEncryptMikroTik.WinForm.csproj", "{0EAFE758-64A2-4745-9811-6142C543560C}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{FC2A3612-717D-4E7D-A439-56CF012138EB}"
 	ProjectSection(SolutionItems) = preProject

@@ -1,6 +1,4 @@
-﻿using LetsEncryptMikroTik.Core;
-
-namespace LetsEncryptMikroTik;
+﻿namespace LetsEncryptMikroTik.WinForm;
 
 internal class InMemorySinkLog : InMemorySink
 {

@@ -3,10 +3,11 @@
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net7.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
 		<AnalysisMode>AllEnabledByDefault</AnalysisMode>
 		<UseWindowsForms>true</UseWindowsForms>
-		<RootNamespace>LetsEncryptMikroTik</RootNamespace>
-		<AssemblyName>LetsEncryptMikroTik</AssemblyName>
+		<RootNamespace>LetsEncryptMikroTik.WinForm</RootNamespace>
+		<AssemblyName>LetsEncryptMikroTik.WinForm</AssemblyName>
 		<InvariantGlobalization>true</InvariantGlobalization>
 	</PropertyGroup>
 
@@ -47,6 +48,20 @@
 			<Generator>SettingsSingleFileGenerator</Generator>
 			<LastGenOutput>Settings.Designer.cs</LastGenOutput>
 		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <EditorConfigFiles Remove="C:\Users\Miles\source\repos\DanilovSoft\LetsEncryptMikroTik\WinFormCoreGui\.editorconfig" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="C:\Users\Miles\source\repos\DanilovSoft\LetsEncryptMikroTik\WinFormCoreGui\.editorconfig" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="Serilog.Extensions.Logging" Version="7.0.0" />
+	  <PackageReference Include="Serilog.Sinks.Console" Version="4.1.0" />
+	  <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
 	</ItemGroup>
 
 </Project>

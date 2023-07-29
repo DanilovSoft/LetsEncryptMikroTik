@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Forms;
 
-namespace LetsEncryptMikroTik;
+namespace LetsEncryptMikroTik.WinForm;
 
 static class Program
 {

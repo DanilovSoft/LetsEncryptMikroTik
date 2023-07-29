@@ -26,7 +26,7 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
     private int? _listenPort;
     public int ListenPort => _listenPort ?? throw new InvalidOperationException("Сначала нужно вызвать Start");
 
-    public AlpnChallenge(ConfigClass config, string identifier, string challengeTokenValue)
+    public AlpnChallenge(Options config, string identifier, string challengeTokenValue)
     {
         _identifier = identifier;
         _challengeTokenValue = challengeTokenValue;

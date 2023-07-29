@@ -5,6 +5,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using LetsEncryptMikroTik.WinForm;
+using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Extensions.Logging;
 
 namespace LetsEncryptMikroTik;
 
@@ -73,7 +77,7 @@ public partial class Form1 : Form
             ftpPassword = mtPassword;
         }
 
-        var config = new Core.ConfigClass
+        var config = new Core.Options
         {
             MikroTikAddress = textBox_MtAddress.Text.Trim(),
             MikroTikPort = int.Parse(textBox_mtPort.Text),
@@ -103,7 +107,7 @@ public partial class Form1 : Form
         richTextBox1.Clear();
         try
         {
-            await Task.Run(() => program.RunAsync(logToFile: true, logSink: new InMemorySinkLog(this)));
+            await Task.Run(() => program.RunAsync(logToFile: true, logSink: new InMemorySinkLog(this))).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -118,6 +122,35 @@ public partial class Form1 : Form
             groupBox_lec.Enabled = true;
             //FreeConsole();
         }
+    }
+
+    private static Microsoft.Extensions.Logging.ILogger CreateLogger(InMemorySink? logSink, bool writeToFile)
+    {
+        var loggerBuilder = new LoggerConfiguration();
+
+        if (writeToFile)
+        {
+            loggerBuilder.WriteTo.File("program.log");
+        }
+
+        if (logSink != null)
+        {
+            loggerBuilder
+                .WriteTo.Sink(logSink);
+        }
+
+        if (Environment.UserInteractive)
+        {
+            loggerBuilder
+                .WriteTo.Console();
+        }
+
+        var serilogLogger = loggerBuilder.CreateLogger();
+
+        var microsoftLogger = new SerilogLoggerFactory(serilogLogger)
+            .CreateLogger<Form1>(); // creates an instance of ILogger<IMyService>
+
+        return microsoftLogger;
     }
 
     internal void OnLogMessage(string message)

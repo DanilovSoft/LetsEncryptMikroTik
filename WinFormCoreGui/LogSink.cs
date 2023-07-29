@@ -5,7 +5,7 @@ using Serilog.Formatting.Display;
 using System.Globalization;
 using System.IO;
 
-namespace LetsEncryptMikroTik.Core;
+namespace LetsEncryptMikroTik.WinForm;
 
 public abstract class InMemorySink : ILogEventSink
 {

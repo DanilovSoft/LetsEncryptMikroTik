@@ -14,7 +14,6 @@
 	<ItemGroup>
 		<PackageReference Include="Certes" Version="3.0.4" />
 		<PackageReference Include="Danilovsoft.MikroApi" Version="1.6.2" />
-		<PackageReference Include="Serilog.Sinks.Console" Version="4.1.0" />
-		<PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="7.0.1" />
 	</ItemGroup>
 </Project>
