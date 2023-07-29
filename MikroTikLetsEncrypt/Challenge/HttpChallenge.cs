@@ -1,8 +1,6 @@
-﻿using Serilog;
-using System;
-using System.Net;
+﻿using System.Net;
 using System.Text;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace LetsEncryptMikroTik.Core;
 
@@ -10,6 +8,7 @@ internal sealed class HttpChallenge : IChallenge, IDisposable
 {
     private readonly SimpleHttpListener _listener;
     private readonly string _keyAuthString;
+    private readonly ILogger _logger;
     private volatile bool _stopRequired;
     public int ListenPort => _listener.ListenPort;
     private readonly TaskCompletionSource<int> _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -17,10 +16,14 @@ internal sealed class HttpChallenge : IChallenge, IDisposable
 
     public int PublicPort => 80; // Не менять.
 
-    public HttpChallenge(Options config, string keyAuthString)
+    public HttpChallenge(IPAddress localAddress, string keyAuthString, ILogger logger)
     {
+        ArgumentNullException.ThrowIfNull(localAddress);
+        ArgumentNullException.ThrowIfNull(keyAuthString);
+
         _keyAuthString = keyAuthString;
-        _listener = new SimpleHttpListener(config.ThisMachineIp);
+        _logger = logger;
+        _listener = new SimpleHttpListener(localAddress);
     }
 
     public void Start()
@@ -40,9 +43,9 @@ internal sealed class HttpChallenge : IChallenge, IDisposable
                 if (context == null)
                     return; // Слушатель был остановлен.
 
-                if (context.Request.Method == "GET" && context.Request.Uri.LocalPath.StartsWith("/.well-known/acme-challenge/"))
+                if (context.Request.Method == "GET" && context.Request.Uri.LocalPath.StartsWith("/.well-known/acme-challenge/", StringComparison.OrdinalIgnoreCase))
                 {
-                    Log.Information($"Принят HTTP запрос: {context.Request.Uri.Scheme}://{context.Request.Uri.Host}/...");
+                    _logger.LogInformation("Принят HTTP запрос: {Scheme}://{Host}/...", context.Request.Uri.Scheme, context.Request.Uri.Host);
 
                     var response = context.Response;
                     response.ContentType = "plain/text";
@@ -58,7 +61,7 @@ internal sealed class HttpChallenge : IChallenge, IDisposable
 
                     _tcs.TrySetResult(0);
 
-                    Log.Information($"Отправлен ключ подтверждения.");
+                    _logger.LogInformation("Отправлен ключ подтверждения");
                 }
             }
             catch (HttpListenerClosedException)

@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace LetsEncryptMikroTik.Properties {
+namespace LetsEncryptMikroTik.WinForm.Properties {
     using System;
     
     

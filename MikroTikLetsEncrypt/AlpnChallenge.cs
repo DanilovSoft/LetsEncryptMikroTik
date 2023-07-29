@@ -1,15 +1,10 @@
 ﻿using Org.BouncyCastle.Asn1;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace LetsEncryptMikroTik.Core;
 
@@ -21,18 +16,38 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
     private readonly string _challengeTokenValue;
     private readonly CancellationTokenSource _cts = new();
     private readonly TaskCompletionSource<int> _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    public Task Completion => _tcs.Task;
-    public int PublicPort => 443; // Не менять.
     private int? _listenPort;
-    public int ListenPort => _listenPort ?? throw new InvalidOperationException("Сначала нужно вызвать Start");
 
-    public AlpnChallenge(Options config, string identifier, string challengeTokenValue)
+    public AlpnChallenge(IPAddress localAddress, string identifier, string challengeTokenValue)
     {
         _identifier = identifier;
         _challengeTokenValue = challengeTokenValue;
         _certificate = PrepareChallenge();
-       
-        _listener = new TcpListener(config.ThisMachineIp, 0);
+        _listener = new TcpListener(localAddress, 0);
+    }
+
+    public Task Completion => _tcs.Task;
+    public int PublicPort => 443; // Не менять.
+    public int ListenPort => _listenPort ?? throw new InvalidOperationException("Сначала нужно вызвать Start");
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _listener.Stop();
+        _certificate.Dispose();
+    }
+
+    public void Start()
+    {
+        _listener.Start();
+        _listenPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
+        _listener.BeginAcceptTcpClient(OnConnected, null);
+    }
+
+    public Task RunAsync()
+    {
+        Start();
+        return Task.CompletedTask;
     }
 
     private X509Certificate2 PrepareChallenge()
@@ -48,6 +63,7 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
                 HashAlgorithmName.SHA256,
                 RSASignaturePadding.Pkcs1);
 
+            // TODO: SHA256.HashData()
             using var sha = SHA256.Create();
             var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(_challengeTokenValue));
             request.CertificateExtensions.Add(
@@ -74,19 +90,6 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
         }
     }
 
-    public void Start()
-    {
-        _listener.Start();
-        _listenPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
-        _listener.BeginAcceptTcpClient(OnConnected, null);
-    }
-
-    public Task RunAsync()
-    {
-        Start();
-        return Task.CompletedTask;
-    }
-
     private void OnConnected(IAsyncResult asyncResult)
     {
         TcpClient client;
@@ -94,8 +97,7 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
         {
             client = _listener.EndAcceptTcpClient(asyncResult);
         }
-        catch (ObjectDisposedException)
-        // Был запрос на остановку.
+        catch (ObjectDisposedException) // Был запрос на остановку.
         {
             return;
         }
@@ -139,17 +141,10 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
         {
             return;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             //Debug.Assert(false);
             //Debug.WriteLine(ex);
         }
-    }
-
-    public void Dispose()
-    {
-        _cts.Cancel();
-        _listener.Stop();
-        _certificate.Dispose();
     }
 }

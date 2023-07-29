@@ -1,9 +1,6 @@
-﻿using System;
-using System.Globalization;
-using System.Linq;
+﻿using System.Globalization;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading.Tasks;
 using Certes;
 using Certes.Acme;
 using Certes.Acme.Resource;
@@ -15,28 +12,29 @@ namespace LetsEncryptMikroTik.Core;
 internal sealed class Acme
 {
     private readonly MikroTikConnection _connection;
-    private readonly Options _config;
+    private readonly CertUpdaterOptions _options;
     private readonly ILogger _logger;
     private readonly string _domainName;
     private readonly IPAddress _thisMachineIp;
     private readonly LeUri _letsEncryptAddress;
 
-    public Acme(MikroTikConnection connection, Options config, ILogger logger)
+    /// <exception cref="LetsEncryptMikroTikException"/>
+    public Acme(MikroTikConnection connection, CertUpdaterOptions options, ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(connection);
-        ArgumentNullException.ThrowIfNull(config);
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
 
         _connection = connection;
 
-        if (string.IsNullOrEmpty(config.DomainName))
-            throw new ArgumentOutOfRangeException(nameof(config), "Имя домена не может быть пустым");
+        if (string.IsNullOrEmpty(options.DomainName))
+            throw new ArgumentOutOfRangeException(nameof(options), "Имя домена не может быть пустым");
 
-        _domainName = config.DomainName;
-        _thisMachineIp = config.ThisMachineIp ?? throw new ArgumentOutOfRangeException(nameof(config), "ThisMachineIp не может быть пустым");
-        _letsEncryptAddress = config.LetsEncryptAddress ?? throw new ArgumentOutOfRangeException(nameof(config), "LetsEncryptAddress не может быть пустым");
+        _domainName = options.DomainName;
+        _thisMachineIp = options.LocalIP ?? throw new ArgumentOutOfRangeException(nameof(options), "ThisMachineIp не может быть пустым");
+        _letsEncryptAddress = options.LetsEncryptAddress ?? throw new ArgumentOutOfRangeException(nameof(options), "LetsEncryptAddress не может быть пустым");
 
-        _config = config;
+        _options = options;
         _logger = logger;
     }
 
@@ -62,26 +60,26 @@ internal sealed class Acme
         {
             acme = new AcmeContext(_letsEncryptAddress);
             _logger.LogInformation("Авторизация в Let's Encrypt");
-            account = await acme.NewAccount(_config.Email, termsOfServiceAgreed: true).ConfigureAwait(false);
+            account = await acme.NewAccount(_options.Email, termsOfServiceAgreed: true).ConfigureAwait(false);
             // Save the account key for later use
             //string pemKey = acme.AccountKey.ToPem();
         }
 
         _logger.LogInformation("Заказываем новый сертификат");
-        var order = await acme.NewOrder(new[] { _config.DomainName }).ConfigureAwait(false);
+        var order = await acme.NewOrder(new[] { _options.DomainName }).ConfigureAwait(false);
 
         // Get the token and key authorization string.
         _logger.LogInformation("Получаем способы валидации заказа");
         var authz = (await order.Authorizations().ConfigureAwait(false)).First();
 
-        if (_config.UseAlpn)
+        if (_options.UseAlpn)
         {
             _logger.LogInformation("Выбираем TLS-ALPN-01 способ валидации");
             var challenge = await authz.TlsAlpn().ConfigureAwait(false) ?? throw new InvalidOperationException("No TLS ALPN challenge available");
-            var keyAuthz = challenge.KeyAuthz;
+            var keyAuthString = challenge.KeyAuthz;
             _ = challenge.Token;
 
-            await ChallengeAlpnAsync(challenge, keyAuthz).ConfigureAwait(false);
+            await ChallengeAlpnAsync(challenge, keyAuthString).ConfigureAwait(false);
         }
         else
         {
@@ -99,7 +97,7 @@ internal sealed class Acme
 
         var cert = await order.Generate(new CsrInfo
         {
-            CommonName = _config.DomainName,
+            CommonName = _options.DomainName,
             CountryName = "CA",
             State = "Ontario",
             Locality = "Toronto",
@@ -113,35 +111,26 @@ internal sealed class Acme
 
         // Export PFX
         var pfxBuilder = cert.ToPfx(privateKey);
-        var pfx = pfxBuilder.Build(friendlyName: _config.DomainName, password: "");
+        var pfx = pfxBuilder.Build(friendlyName: _options.DomainName, password: "");
 
         //await acme.RevokeCertificate(pfx, RevocationReason.Superseded, privateKey);
 
-        using (var cert2 = new X509Certificate2(pfx))
-        {
-            return new LetsEncryptCert(cert2.NotAfter, certPem, keyPem, cert2.GetCommonName(), cert2.GetSha2Thumbprint());
-        }
+        using var cert2 = new X509Certificate2(pfx);
+        return new LetsEncryptCert(cert2.NotAfter, certPem, keyPem, cert2.GetCommonName(), cert2.GetSha2Thumbprint());
     }
 
-    /// <exception cref="LetsEncryptMikroTikException"/>
     private async Task HttpChallengeAsync(IChallengeContext httpChallenge, string keyAuthString)
     {
-        using (var challenge = new HttpChallenge(_config, keyAuthString))
-        {
-            await ChallengeAsync(challenge, httpChallenge).ConfigureAwait(false);
-        }
+        using var challenge = new HttpChallenge(_options.LocalIP, keyAuthString, _logger);
+        await ChallengeAsync(challenge, httpChallenge).ConfigureAwait(false);
     }
 
-    /// <exception cref="LetsEncryptMikroTikException"/>
     private async Task ChallengeAlpnAsync(IChallengeContext challengeContext, string keyAuthString)
     {
-        using (var alpnChallenge = new AlpnChallenge(_config, _domainName, keyAuthString))
-        {
-            await ChallengeAsync(alpnChallenge, challengeContext).ConfigureAwait(false);
-        }
+        using var alpnChallenge = new AlpnChallenge(_options.LocalIP, _domainName, keyAuthString);
+        await ChallengeAsync(alpnChallenge, challengeContext).ConfigureAwait(false);
     }
 
-    /// <exception cref="LetsEncryptMikroTikException"/>
     private async Task ChallengeAsync(IChallenge challenge, IChallengeContext httpChallenge)
     {
         // Запустить asp net.

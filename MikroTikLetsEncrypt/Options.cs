@@ -5,6 +5,9 @@ namespace LetsEncryptMikroTik.Core;
 public sealed class Options
 {
     internal const int ListenPort = 443; // The HTTP-01 challenge can only be done on port 80.
+    /// <summary>
+    /// IP Address or hostname.
+    /// </summary>
     public required string MikroTikAddress { get; init; }
     public required int MikroTikPort { get; init; }
     public required string DomainName { get; init; }

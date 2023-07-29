@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace LetsEncryptMikroTik.Core;
+﻿namespace LetsEncryptMikroTik.Core;
 
 [Serializable]
 public sealed class HttpListenerClosedException : Exception

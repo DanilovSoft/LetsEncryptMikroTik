@@ -5,18 +5,18 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using LetsEncryptMikroTik.WinForm;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Core;
 using Serilog.Extensions.Logging;
 
-namespace LetsEncryptMikroTik;
+namespace LetsEncryptMikroTik.WinForm;
 
 public partial class Form1 : Form
 {
     // Create byte array for additional entropy when using Protect method.
     private static readonly byte[] s_aditionalEntropy = { 41, 23, 98, 128, 246, 100, 21, 24 };
-    private readonly Action<string> _onLogMessageHandler;
+    private readonly Action<object?, string> _onLogMessageHandler;
 
     //[DllImport("kernel32.dll", SetLastError = true)]
     //[return: MarshalAs(UnmanagedType.Bool)]
@@ -30,8 +30,8 @@ public partial class Form1 : Form
     //static extern bool AttachConsole(int dwProcessId);
     //private const int ATTACH_PARENT_PROCESS = -1;
 
-    private string _certFilePath;
-    private string _privKeyPath;
+    //private string _certFilePath;
+    //private string _privKeyPath;
 
     public Form1()
     {
@@ -48,7 +48,7 @@ public partial class Form1 : Form
         textBox_wan.Text = Properties.Settings.Default.WanIface;
         groupBox_ftp.Enabled = checkBox1.Checked;
 
-        comboBox_lec.DataSource = Core.Program.GetAddresses();
+        comboBox_lec.DataSource = Core.CertUpdater.GetAddresses();
         var selIndex = Properties.Settings.Default.SelectedAddress;
         if (comboBox_lec.Items.Count - 1 >= selIndex)
         {
@@ -77,7 +77,7 @@ public partial class Form1 : Form
             ftpPassword = mtPassword;
         }
 
-        var config = new Core.Options
+        var options = new Core.Options
         {
             MikroTikAddress = textBox_MtAddress.Text.Trim(),
             MikroTikPort = int.Parse(textBox_mtPort.Text),
@@ -89,15 +89,10 @@ public partial class Form1 : Form
             Email = textBox_email.Text.Trim(),
             WanIface = textBox_wan.Text.Trim(),
             Force = checkBox_force.Checked,
-            LetsEncryptAddress = (Core.LeUri)(Uri)comboBox_lec.SelectedValue,
+            LetsEncryptAddress = (Core.LeUri)(Uri)comboBox_lec.SelectedValue!,
             SaveFile = checkBox_saveFile.Checked,
             UseAlpn = radioButton_alpn.Checked,
         };
-
-        var program = new Core.Program(config);
-
-        //AllocConsole();
-        //AttachConsole(ATTACH_PARENT_PROCESS);
 
         button_start.Enabled = false;
         groupBox_mt.Enabled = false;
@@ -105,9 +100,19 @@ public partial class Form1 : Form
         textBox_wan.Enabled = false;
         groupBox_lec.Enabled = false;
         richTextBox1.Clear();
+
+        var logSync = new InMemorySinkLog();
+        logSync.NewMessage += OnLogMessage;
         try
         {
-            await Task.Run(() => program.RunAsync(logToFile: true, logSink: new InMemorySinkLog(this))).ConfigureAwait(true);
+            //AllocConsole();
+            //AttachConsole(ATTACH_PARENT_PROCESS);
+            await using var serilogLogger = CreateLogger(logSync, writeToFile: true); // Does Close And Flush on DisposeAsync.
+            using var loggerFactory = new SerilogLoggerFactory(serilogLogger);
+            var microsoftLogger = loggerFactory.CreateLogger<Form1>(); // creates an instance of ILogger<IMyService>
+            var program = new Core.CertUpdater(options, microsoftLogger);
+
+            await Task.Run(() => program.RunAsync()).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -115,6 +120,7 @@ public partial class Form1 : Form
         }
         finally
         {
+            logSync.NewMessage -= OnLogMessage;
             button_start.Enabled = true;
             groupBox_mt.Enabled = true;
             groupBox_ftp.Enabled = true;
@@ -124,7 +130,7 @@ public partial class Form1 : Form
         }
     }
 
-    private static Microsoft.Extensions.Logging.ILogger CreateLogger(InMemorySink? logSink, bool writeToFile)
+    private static Logger CreateLogger(InMemorySink? logSink, bool writeToFile)
     {
         var loggerBuilder = new LoggerConfiguration();
 
@@ -145,27 +151,21 @@ public partial class Form1 : Form
                 .WriteTo.Console();
         }
 
-        var serilogLogger = loggerBuilder.CreateLogger();
-
-        var microsoftLogger = new SerilogLoggerFactory(serilogLogger)
-            .CreateLogger<Form1>(); // creates an instance of ILogger<IMyService>
-
-        return microsoftLogger;
+        return loggerBuilder.CreateLogger();
     }
 
-    internal void OnLogMessage(string message)
+    private void OnLogMessage(object? sender, string message)
     {
         if (richTextBox1.InvokeRequired)
         {
-            richTextBox1.BeginInvoke(_onLogMessageHandler, message);
+            richTextBox1.BeginInvoke(_onLogMessageHandler, sender, message);
+            return;
         }
-        else
-        {
-            richTextBox1.AppendText(message);
-        }
+
+        richTextBox1.AppendText(message);
     }
 
-    private static string Protect(string s)
+    private static string? Protect(string s)
     {
 #if NET461
         throw new NotImplementedException();
@@ -187,7 +187,7 @@ public partial class Form1 : Form
 #endif
     }
 
-    private static string Unprotect(string dataBase64)
+    private static string? Unprotect(string dataBase64)
     {
 #if NET461
         throw new NotImplementedException();
@@ -336,14 +336,14 @@ public partial class Form1 : Form
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                     return;
 
-                _certFilePath = dialog.FileName;
+                //_certFilePath = dialog.FileName;
 
                 dialog.Title = "Выберите приватный ключ";
                 dialog.FileName = "private_key.pem";
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                     return;
 
-                _privKeyPath = dialog.FileName;
+                //_privKeyPath = dialog.FileName;
             }
 
             groupBox_ftp.Enabled = false;
@@ -360,17 +360,17 @@ public partial class Form1 : Form
         }
     }
 
-    private void ComboBox_lec_SelectedIndexChanged(object sender, EventArgs e)
+    private void ComboBox_lec_SelectedIndexChanged(object? sender, EventArgs e)
     {
         Properties.Settings.Default.SelectedAddress = comboBox_lec.SelectedIndex;
     }
 
-    private void textBox_MtLogin_Leave(object sender, EventArgs e)
+    private void TextBox_MtLogin_Leave(object? sender, EventArgs e)
     {
         SaveProperties();
     }
 
-    private void textBox_mtPassword_Leave(object sender, EventArgs e)
+    private void TextBox_mtPassword_Leave(object? sender, EventArgs e)
     {
         SaveProperties();
     }
@@ -380,62 +380,62 @@ public partial class Form1 : Form
         Properties.Settings.Default.Save();
     }
 
-    private void textBox_ftpLogin_Leave(object sender, EventArgs e)
+    private void TextBox_ftpLogin_Leave(object sender, EventArgs e)
     {
         SaveProperties();
     }
 
-    private void checkBox1_CheckedChanged(object sender, EventArgs e)
+    private void CheckBox1_CheckedChanged(object sender, EventArgs e)
     {
         groupBox_ftp.Enabled = checkBox1.Checked;
     }
 
-    private void textBox_mtPort_Leave(object sender, EventArgs e)
+    private void TextBox_mtPort_Leave(object sender, EventArgs e)
     {
         SaveProperties();
     }
 
-    private void textBox_ftpPassword_Leave(object sender, EventArgs e)
+    private void TextBox_ftpPassword_Leave(object sender, EventArgs e)
     {
         SaveProperties();
     }
 
-    private void textBox_wan_Leave(object sender, EventArgs e)
+    private void TextBox_wan_Leave(object sender, EventArgs e)
     {
         SaveProperties();
     }
 
-    private void textBox_domainName_Leave(object sender, EventArgs e)
+    private void TextBox_domainName_Leave(object sender, EventArgs e)
     {
         SaveProperties();
     }
 
-    private void textBox_email_Leave(object sender, EventArgs e)
+    private void TextBox_email_Leave(object sender, EventArgs e)
     {
         SaveProperties();
     }
 
-    private void comboBox_lec_SelectedIndexChanged_1(object sender, EventArgs e)
+    private void ComboBox_lec_SelectedIndexChanged_1(object sender, EventArgs e)
     {
         SaveProperties();
     }
 
-    private void checkBox_saveFile_CheckedChanged(object sender, EventArgs e)
+    private void CheckBox_saveFile_CheckedChanged(object sender, EventArgs e)
     {
         SaveProperties();
     }
 
-    private void checkBox_force_CheckedChanged(object sender, EventArgs e)
+    private void CheckBox_force_CheckedChanged(object sender, EventArgs e)
     {
         SaveProperties();
     }
 
-    private void radioButton_http_CheckedChanged(object sender, EventArgs e)
+    private void RadioButton_http_CheckedChanged(object sender, EventArgs e)
     {
         SaveProperties();
     }
 
-    private void radioButton_alpn_CheckedChanged(object sender, EventArgs e)
+    private void RadioButton_alpn_CheckedChanged(object sender, EventArgs e)
     {
         SaveProperties();
     }

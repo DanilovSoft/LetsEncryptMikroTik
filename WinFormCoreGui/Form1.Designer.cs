@@ -1,4 +1,4 @@
-﻿namespace LetsEncryptMikroTik
+﻿namespace LetsEncryptMikroTik.WinForm
 {
     partial class Form1
     {
@@ -107,7 +107,7 @@
             this.checkBox1.TabIndex = 15;
             this.checkBox1.Text = "Отдельный профиль для FTP";
             this.checkBox1.UseVisualStyleBackColor = true;
-            this.checkBox1.CheckedChanged += new System.EventHandler(this.checkBox1_CheckedChanged);
+            this.checkBox1.CheckedChanged += new System.EventHandler(this.CheckBox1_CheckedChanged);
             // 
             // groupBox_nat
             // 
@@ -137,7 +137,7 @@
             this.textBox_wan.Size = new System.Drawing.Size(100, 23);
             this.textBox_wan.TabIndex = 7;
             this.textBox_wan.TextChanged += new System.EventHandler(this.TextBox1_TextChanged_1);
-            this.textBox_wan.Leave += new System.EventHandler(this.textBox_wan_Leave);
+            this.textBox_wan.Leave += new System.EventHandler(this.TextBox_wan_Leave);
             // 
             // groupBox_ftp
             // 
@@ -177,7 +177,7 @@
             this.textBox_ftpLogin.Size = new System.Drawing.Size(100, 23);
             this.textBox_ftpLogin.TabIndex = 5;
             this.textBox_ftpLogin.TextChanged += new System.EventHandler(this.TextBox_ftpLogin_TextChanged);
-            this.textBox_ftpLogin.Leave += new System.EventHandler(this.textBox_ftpLogin_Leave);
+            this.textBox_ftpLogin.Leave += new System.EventHandler(this.TextBox_ftpLogin_Leave);
             // 
             // textBox_ftpPassword
             // 
@@ -187,7 +187,7 @@
             this.textBox_ftpPassword.TabIndex = 6;
             this.textBox_ftpPassword.UseSystemPasswordChar = true;
             this.textBox_ftpPassword.TextChanged += new System.EventHandler(this.TextBox_ftpPassword_TextChanged);
-            this.textBox_ftpPassword.Leave += new System.EventHandler(this.textBox_ftpPassword_Leave);
+            this.textBox_ftpPassword.Leave += new System.EventHandler(this.TextBox_ftpPassword_Leave);
             // 
             // groupBox3
             // 
@@ -247,7 +247,7 @@
             this.textBox_mtPort.TextChanged += new System.EventHandler(this.TextBox_mtPort_TextChanged);
             this.textBox_mtPort.KeyDown += new System.Windows.Forms.KeyEventHandler(this.TextBox_mtPort_KeyDown);
             this.textBox_mtPort.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.TextBox_mtPort_KeyPress);
-            this.textBox_mtPort.Leave += new System.EventHandler(this.textBox_mtPort_Leave);
+            this.textBox_mtPort.Leave += new System.EventHandler(this.TextBox_mtPort_Leave);
             // 
             // label3
             // 
@@ -265,7 +265,7 @@
             this.textBox_MtLogin.Size = new System.Drawing.Size(100, 23);
             this.textBox_MtLogin.TabIndex = 3;
             this.textBox_MtLogin.TextChanged += new System.EventHandler(this.TextBox_MtLogin_TextChanged);
-            this.textBox_MtLogin.Leave += new System.EventHandler(this.textBox_MtLogin_Leave);
+            this.textBox_MtLogin.Leave += new System.EventHandler(this.TextBox_MtLogin_Leave);
             // 
             // textBox_mtPassword
             // 
@@ -275,7 +275,7 @@
             this.textBox_mtPassword.TabIndex = 4;
             this.textBox_mtPassword.UseSystemPasswordChar = true;
             this.textBox_mtPassword.TextChanged += new System.EventHandler(this.TextBox3_TextChanged);
-            this.textBox_mtPassword.Leave += new System.EventHandler(this.textBox_mtPassword_Leave);
+            this.textBox_mtPassword.Leave += new System.EventHandler(this.TextBox_mtPassword_Leave);
             // 
             // label4
             // 
@@ -323,7 +323,7 @@
             this.radioButton_alpn.Text = "443 Использовать порт";
             this.toolTip1.SetToolTip(this.radioButton_alpn, "Использует ALPN алгоритм валидации");
             this.radioButton_alpn.UseVisualStyleBackColor = true;
-            this.radioButton_alpn.CheckedChanged += new System.EventHandler(this.radioButton_alpn_CheckedChanged);
+            this.radioButton_alpn.CheckedChanged += new System.EventHandler(this.RadioButton_alpn_CheckedChanged);
             // 
             // radioButton_http
             // 
@@ -335,7 +335,7 @@
             this.radioButton_http.TabIndex = 17;
             this.radioButton_http.Text = "80 Использовать порт";
             this.radioButton_http.UseVisualStyleBackColor = true;
-            this.radioButton_http.CheckedChanged += new System.EventHandler(this.radioButton_http_CheckedChanged);
+            this.radioButton_http.CheckedChanged += new System.EventHandler(this.RadioButton_http_CheckedChanged);
             // 
             // checkBox_saveFile
             // 
@@ -350,7 +350,7 @@
             this.checkBox_saveFile.Text = "Сохранить в файл";
             this.toolTip1.SetToolTip(this.checkBox_saveFile, "Позволяет сохранить полученный сертификат и приватный ключ в файл");
             this.checkBox_saveFile.UseVisualStyleBackColor = true;
-            this.checkBox_saveFile.CheckedChanged += new System.EventHandler(this.checkBox_saveFile_CheckedChanged);
+            this.checkBox_saveFile.CheckedChanged += new System.EventHandler(this.CheckBox_saveFile_CheckedChanged);
             // 
             // checkBox_force
             // 
@@ -363,7 +363,7 @@
             this.checkBox_force.Text = "Принудительно";
             this.toolTip1.SetToolTip(this.checkBox_force, "Позволяет добавить в микротик новый сертификат даже если старый еще актуален");
             this.checkBox_force.UseVisualStyleBackColor = true;
-            this.checkBox_force.CheckedChanged += new System.EventHandler(this.checkBox_force_CheckedChanged);
+            this.checkBox_force.CheckedChanged += new System.EventHandler(this.CheckBox_force_CheckedChanged);
             // 
             // comboBox_lec
             // 
@@ -375,7 +375,7 @@
             this.comboBox_lec.Size = new System.Drawing.Size(132, 23);
             this.comboBox_lec.TabIndex = 13;
             this.comboBox_lec.ValueMember = "Item2";
-            this.comboBox_lec.SelectedIndexChanged += new System.EventHandler(this.comboBox_lec_SelectedIndexChanged_1);
+            this.comboBox_lec.SelectedIndexChanged += new System.EventHandler(this.ComboBox_lec_SelectedIndexChanged_1);
             // 
             // label10
             // 
@@ -393,7 +393,7 @@
             this.textBox_email.Size = new System.Drawing.Size(132, 23);
             this.textBox_email.TabIndex = 9;
             this.textBox_email.TextChanged += new System.EventHandler(this.TextBox_email_TextChanged);
-            this.textBox_email.Leave += new System.EventHandler(this.textBox_email_Leave);
+            this.textBox_email.Leave += new System.EventHandler(this.TextBox_email_Leave);
             // 
             // label8
             // 
@@ -420,7 +420,7 @@
             this.textBox_domainName.Size = new System.Drawing.Size(132, 23);
             this.textBox_domainName.TabIndex = 8;
             this.textBox_domainName.TextChanged += new System.EventHandler(this.TextBox1_TextChanged);
-            this.textBox_domainName.Leave += new System.EventHandler(this.textBox_domainName_Leave);
+            this.textBox_domainName.Leave += new System.EventHandler(this.TextBox_domainName_Leave);
             // 
             // richTextBox1
             // 

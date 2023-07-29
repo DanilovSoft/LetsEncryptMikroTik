@@ -1,7 +1,4 @@
-﻿using System;
-using System.Threading.Tasks;
-
-namespace LetsEncryptMikroTik.Core;
+﻿namespace LetsEncryptMikroTik.Core;
 
 internal interface IChallenge
 {

@@ -1,15 +1,7 @@
-﻿using System;
-
-namespace LetsEncryptMikroTik.Core;
+﻿namespace LetsEncryptMikroTik.Core;
 
 internal readonly struct LetsEncryptCert
 {
-    public DateTime ExpiresAfter { get; }
-    public string CertPem { get; }
-    public string KeyPem { get; }
-    public string Thumbprint { get; }
-    public string CommonName { get; }
-
     public LetsEncryptCert(DateTime notAfter, string certPem, string keyPem, string commonName, string thumbprint)
     {
         ExpiresAfter = notAfter;
@@ -18,4 +10,10 @@ internal readonly struct LetsEncryptCert
         CommonName = commonName;
         Thumbprint = thumbprint;
     }
+
+    public DateTime ExpiresAfter { get; }
+    public string CertPem { get; }
+    public string KeyPem { get; }
+    public string Thumbprint { get; }
+    public string CommonName { get; }
 }

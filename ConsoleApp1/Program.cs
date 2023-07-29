@@ -2,26 +2,37 @@
 using System;
 using System.IO;
 using LetsEncryptMikroTik.Core;
+using System.Reflection;
+using Microsoft.Extensions.Logging;
 
 namespace LetsEncryptMikroTik;
 
 class Program
 {
-    static int Main()
+    static int Main(string[] args)
     {
-        var configurationBuilder = new ConfigurationBuilder()
+        var configuration = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
-            .AddJsonFile("appsettings.local.json", optional: true);
+            .AddUserSecrets(Assembly.GetExecutingAssembly())
+            .AddEnvironmentVariables()
+            .AddCommandLine(args)
+            .Build();
 
-        var configuration = configurationBuilder.Build();
-        var config = configuration.Get<Options>();
+        var options = configuration.Get<Options>();
 
-        var p = new Core.Program(config);
+        using var loggerFactory = LoggerFactory.Create(builder => 
+        {
+            builder.ClearProviders();
+            builder.AddConfiguration(configuration.GetSection("Logging"));
+        });
+        var logger = loggerFactory.CreateLogger<Program>();
+
+        var certUpdater = new Core.CertUpdater(options, logger);
 
         try
         {
-            p.RunAsync().GetAwaiter().GetResult();
+            certUpdater.RunAsync().GetAwaiter().GetResult();
         }
         catch (Exception)
         {
@@ -30,9 +41,8 @@ class Program
 
         if (Environment.UserInteractive)
         {
-            // Press Any Key
-            Console.Write("Для завершения нажмите любую клавишу...");
-            Console.ReadKey(intercept: true);
+            Console.Write("Press Any Key To Exit");
+            Console.ReadKey(intercept: true); // Press Any Key
         }
         return 0;
     }

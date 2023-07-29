@@ -1,12 +1,8 @@
-﻿using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
+﻿using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace System.Net;
 
@@ -29,7 +25,7 @@ internal sealed class SimpleHttpListener : IDisposable
         do
         {
             var listenPort = FindAvailablePort(thisMachineIp, prefPort);
-            var tcp = new TcpListener(thisMachineIp, listenPort);
+            var tcp = new TcpListener(thisMachineIp, listenPort); // TODO задать порт 0.
             try
             {
                 tcp.Start();

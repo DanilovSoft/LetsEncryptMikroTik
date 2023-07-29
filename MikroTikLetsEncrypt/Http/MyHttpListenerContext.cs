@@ -1,6 +1,4 @@
-﻿using System.IO;
-
-namespace System.Net;
+﻿namespace System.Net;
 
 internal sealed class MyHttpListenerContext
 {

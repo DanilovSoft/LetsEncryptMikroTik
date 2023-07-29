@@ -4,7 +4,7 @@
 		<TargetFramework>net7.0</TargetFramework>
 		<AnalysisMode>AllEnabledByDefault</AnalysisMode>
 		<Nullable>Enable</Nullable>
-		<ApplicationIcon />
+		<ImplicitUsings>enable</ImplicitUsings>
 		<OutputType>Library</OutputType>
 		<StartupObject />
 		<RootNamespace>LetsEncryptMikroTik.Core</RootNamespace>

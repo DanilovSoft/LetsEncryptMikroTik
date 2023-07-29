@@ -1,16 +1,13 @@
-﻿namespace LetsEncryptMikroTik.WinForm;
+﻿using System;
 
-internal class InMemorySinkLog : InMemorySink
+namespace LetsEncryptMikroTik.WinForm;
+
+internal sealed class InMemorySinkLog : InMemorySink
 {
-    private readonly Form1 _form;
-
-    public InMemorySinkLog(Form1 form)
-    {
-        _form = form;
-    }
+    public event EventHandler<string>? NewMessage;
 
     public override void NewEntry(string message)
     {
-        _form.OnLogMessage(message);
+        NewMessage?.Invoke(this, message);
     }
 }
