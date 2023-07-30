@@ -8,7 +8,7 @@
 		<UseWindowsForms>true</UseWindowsForms>
 		<RootNamespace>LetsEncryptMikroTik.WinForm</RootNamespace>
 		<AssemblyName>LetsEncryptMikroTik.WinForm</AssemblyName>
-		<InvariantGlobalization>true</InvariantGlobalization>
+		<!--<InvariantGlobalization>true</InvariantGlobalization>-->
 	</PropertyGroup>
 
 	<!--<ItemGroup>

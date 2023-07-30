@@ -106,7 +106,7 @@ public sealed class CertUpdater
                 Force = _options.Force,
                 FtpLogin = _options.FtpLogin,
                 FtpPassword = _options.FtpPassword,
-                UseAlpn = _options.UseAlpn,
+                VerificationMethod = _options.VerificationMethod,
                 ReplaceCertOnDaysLessThan = _options.ReplaceCertOnDaysLessThan,
                 SaveFile = _options.SaveFile
             };

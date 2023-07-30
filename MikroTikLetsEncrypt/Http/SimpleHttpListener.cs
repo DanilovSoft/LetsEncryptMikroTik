@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Channels;
@@ -79,28 +78,6 @@ internal sealed class SimpleHttpListener : IDisposable
         {
             _listener.Stop();
         }
-    }
-
-    // Находит не занятый порт.
-    [Obsolete]
-    private static int FindAvailablePort(IPAddress address, int prefPort)
-    {
-        // Evaluate current system tcp connections. This is the same information provided
-        // by the netstat command line application, just in .Net strongly-typed object
-        // form.  We will look through the list, and if our port we would like to use
-        // in our TcpClient is occupied, we will set isAvailable to false.
-        var ipGlobalProperties = IPGlobalProperties.GetIPGlobalProperties();
-        //TcpConnectionInformation[] tcpConnInfoArray = ipGlobalProperties.GetActiveTcpConnections();
-        var listeners = ipGlobalProperties.GetActiveTcpListeners();
-
-        while (listeners.Any(x => x.Address.Equals(address) && x.Port == prefPort))
-        {
-            checked
-            {
-                prefPort += 1;
-            }
-        }
-        return prefPort;
     }
 
     /// <summary>
@@ -232,8 +209,8 @@ internal sealed class SimpleHttpListener : IDisposable
                 var ind = line.IndexOf(':', StringComparison.Ordinal);
                 if (ind != -1)
                 {
-                    headerName = line.Substring(0, ind).Trim();
-                    var value = line.Substring(ind + 1).Trim();
+                    headerName = line[..ind].Trim();
+                    var value = line[(ind + 1)..].Trim();
 
                     if (value.Length > 0 && headers.TryGetValue(headerName, out var val))
                     {
@@ -246,8 +223,11 @@ internal sealed class SimpleHttpListener : IDisposable
                 }
                 else
                 {
-                    line = line.Trim();
-                    headers[headerName] += " " + line;
+                    if (headerName != null)
+                    {
+                        line = line.Trim();
+                        headers[headerName] += " " + line;
+                    }
                 }
             } while (true);
 

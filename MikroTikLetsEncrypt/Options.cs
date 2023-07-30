@@ -14,6 +14,7 @@ public sealed class Options
     public required string MikroTikLogin { get; init; }
     public required string WanIface { get; init; }
     public required LeUri LetsEncryptAddress { get; init; }
+    public required VerificationMethod VerificationMethod { get; init; }
     public string? FtpLogin { get; init; }
     public string? FtpPassword { get; init; }
     public string? MikroTikPassword { get; init; }
@@ -21,6 +22,5 @@ public sealed class Options
     public bool Force { get; init; }
     internal int ReplaceCertOnDaysLessThan { get; init; } = 60;
     public bool SaveFile { get; init; }
-    public bool UseAlpn { get; init; }
     internal IPAddress? ThisMachineIp { get; set; }
 }

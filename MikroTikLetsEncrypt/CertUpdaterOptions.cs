@@ -15,12 +15,11 @@ public sealed class CertUpdaterOptions
     /// </summary>
     public required IPAddress LocalIP { get; init; }
     public required LeUri LetsEncryptAddress { get; init; }
+    public required VerificationMethod VerificationMethod { get; init; }
     public string? FtpLogin { get; init; }
     public string? FtpPassword { get; init; }
-    //public string? MikroTikPassword { get; init; }
     public string? Email { get; init; }
     public bool Force { get; init; }
     public bool SaveFile { get; init; }
-    public bool UseAlpn { get; init; }
     public int ReplaceCertOnDaysLessThan { get; init; } = 60;
 }

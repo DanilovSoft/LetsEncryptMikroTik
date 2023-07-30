@@ -1,10 +1,12 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using Certes;
 using Certes.Acme;
 using Certes.Acme.Resource;
 using DanilovSoft.MikroApi;
+using LetsEncryptMikroTik.Core.Challenge;
 using Microsoft.Extensions.Logging;
 
 namespace LetsEncryptMikroTik.Core;
@@ -42,10 +44,10 @@ internal sealed class Acme
     /// HTTP-01 challenge.
     /// </summary>
     /// <exception cref="LetsEncryptMikroTikException"/>
-    public async Task<LetsEncryptCert> GetCertAsync(string? accountPemKey = null)
+    public async Task<LetsEncryptCert> GetCertAsync(string? accountPemKey = null, CancellationToken cancellationToken = default)
     {
         AcmeContext acme;
-        IAccountContext account;
+        //IAccountContext account;
         //Uri knownServer = _letsEncryptAddress;
 
         if (accountPemKey != null)
@@ -54,13 +56,13 @@ internal sealed class Acme
             var accountKey = KeyFactory.FromPem(accountPemKey);
             acme = new AcmeContext(_letsEncryptAddress, accountKey);
             _logger.LogInformation("Авторизация в Let's Encrypt");
-            account = await acme.Account().ConfigureAwait(false);
+            _ = await acme.Account().ConfigureAwait(false);
         }
         else
         {
             acme = new AcmeContext(_letsEncryptAddress);
             _logger.LogInformation("Авторизация в Let's Encrypt");
-            account = await acme.NewAccount(_options.Email, termsOfServiceAgreed: true).ConfigureAwait(false);
+            _ = await acme.NewAccount(_options.Email, termsOfServiceAgreed: true).ConfigureAwait(false);
             // Save the account key for later use
             //string pemKey = acme.AccountKey.ToPem();
         }
@@ -72,22 +74,19 @@ internal sealed class Acme
         _logger.LogInformation("Получаем способы валидации заказа");
         var authz = (await order.Authorizations().ConfigureAwait(false)).First();
 
-        if (_options.UseAlpn)
+        switch (_options.VerificationMethod)
         {
-            _logger.LogInformation("Выбираем TLS-ALPN-01 способ валидации");
-            var challenge = await authz.TlsAlpn().ConfigureAwait(false) ?? throw new InvalidOperationException("No TLS ALPN challenge available");
-            var keyAuthString = challenge.KeyAuthz;
-            _ = challenge.Token;
-
-            await ChallengeAlpnAsync(challenge, keyAuthString).ConfigureAwait(false);
-        }
-        else
-        {
-            _logger.LogInformation("Выбираем HTTP-01 способ валидации");
-            var challenge = await authz.Http().ConfigureAwait(false);
-            var keyAuthz = challenge.KeyAuthz;
-
-            await HttpChallengeAsync(challenge, keyAuthz).ConfigureAwait(false);
+            case VerificationMethod.HTTP01:
+                await Http01Verification(authz, cancellationToken).ConfigureAwait(false);
+                break;
+            case VerificationMethod.DNS01:
+                await Dns01Verification(authz, cancellationToken).ConfigureAwait(false);
+                break;
+            case VerificationMethod.TLSALPN01:
+                await TlsAlpn01Verification(authz, cancellationToken).ConfigureAwait(false);
+                break;
+            default:
+                throw new NotSupportedException();
         }
 
         _logger.LogInformation("Загружаем сертификат");
@@ -119,85 +118,111 @@ internal sealed class Acme
         return new LetsEncryptCert(cert2.NotAfter, certPem, keyPem, cert2.GetCommonName(), cert2.GetSha2Thumbprint());
     }
 
-    private async Task HttpChallengeAsync(IChallengeContext httpChallenge, string keyAuthString)
+    private async Task Http01Verification(IAuthorizationContext authz, CancellationToken cancellationToken)
     {
-        using var challenge = new HttpChallenge(_options.LocalIP, keyAuthString, _logger);
-        await ChallengeAsync(challenge, httpChallenge).ConfigureAwait(false);
+        _logger.LogInformation("Выбираем HTTP-01 способ валидации");
+        var httpChallenge = await authz.Http().ConfigureAwait(false);
+        var keyAuthString = httpChallenge.KeyAuthz;
+
+        using var httpChallengeHandler = new Http01ChallengeHandler(_options.LocalIP, keyAuthString, _logger);
+        await ChallengeAsync(httpChallenge, httpChallengeHandler, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task ChallengeAlpnAsync(IChallengeContext challengeContext, string keyAuthString)
+    private async Task TlsAlpn01Verification(IAuthorizationContext authz, CancellationToken cancellationToken)
     {
-        using var alpnChallenge = new AlpnChallenge(_options.LocalIP, _domainName, keyAuthString);
-        await ChallengeAsync(alpnChallenge, challengeContext).ConfigureAwait(false);
+        _logger.LogInformation("Выбираем TLS-ALPN-01 способ валидации");
+        var tlsChallenge = await authz.TlsAlpn().ConfigureAwait(false) ?? throw new InvalidOperationException("No TLS ALPN challenge available");
+        var keyAuthString = tlsChallenge.KeyAuthz;
+        _ = tlsChallenge.Token;
+
+        using var tlsChallengeHandler = new Alpn01ChallengeHandler(_options.LocalIP, _domainName, keyAuthString);
+        await ChallengeAsync(tlsChallenge, tlsChallengeHandler, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task ChallengeAsync(IChallenge challenge, IChallengeContext httpChallenge)
+    private async Task Dns01Verification(IAuthorizationContext authz, CancellationToken cancellationToken)
     {
-        // Запустить asp net.
-        _logger.LogInformation("Запускаем веб-сервер");
-        challenge.Start();
+        _logger.LogInformation("Выбираем DNS-01 способ валидации");
 
-        var mtNatId = MtAddDstNatRule(dstPort: challenge.PublicPort, toPorts: challenge.ListenPort);
-        var mtFilterId = MtAllowPortFilter(dstPort: challenge.ListenPort, publicPort: challenge.PublicPort);
-        var mtMangleId = MtAllowMangleRule(dstPort: challenge.ListenPort);
+        // Создаем DNS-01 верификацию
+        var dnsChallenge = await authz.Dns().ConfigureAwait(false);
 
-        await Task.Delay(2000).ConfigureAwait(false); // Правило в микротике начинает работать не мгновенно.
+        // Записываем данные DNS-01 верификации в DNS (ваш API должен обеспечить эту функциональность)
+        var keyAuthString = dnsChallenge.KeyAuthz;
 
-        //Challenge status;
+        using var dnsChallengeHandler = new Dns01ChallengeHandler(_options.LocalIP, _domainName, keyAuthString);
+        await ChallengeAsync(dnsChallenge, dnsChallengeHandler, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ChallengeAsync(IChallengeContext challenge, IChallengeHandler handler, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Запускаем сервер верификации");
+        handler.Start();
+        var serverPublicPort = handler.PublicPort; // 80/443/53
+        var listenPort = handler.ListenPort;
+
+        string? mtNatId = null;
+        string? mtFilterId = null;
+        string? mtMangleId = null;
+
         try
         {
-            // Ask the ACME server to validate our domain ownership.
+            mtNatId = MtAddDstNatRule(dstPort: serverPublicPort, toPorts: listenPort);
+            mtFilterId = MtAllowPortFilter(dstPort: listenPort, publicPort: serverPublicPort);
+            mtMangleId = MtAllowMangleRule(dstPort: listenPort);
+
+            await Task.Delay(2000, cancellationToken).ConfigureAwait(false); // Правило в микротике начинает работать не мгновенно.
+
             _logger.LogInformation("Информируем Let's Encrypt что мы готовы пройти валидацию");
-            var status = await httpChallenge.Validate().ConfigureAwait(false);
+            var acmeResponse = await challenge.Validate().ConfigureAwait(false); // Ask the ACME server to validate our domain ownership.
 
             var waitWithSem = true;
-            while (status.Status == ChallengeStatus.Pending)
+            while (acmeResponse.Status == ChallengeStatus.Pending)
             {
                 if (waitWithSem)
                 {
                     _logger.LogInformation("Ожидаем 20 сек входящий HTTP запрос");
-                    var t = await Task.WhenAny(Task.Delay(20_000), challenge.Completion).ConfigureAwait(false);
+                    var timeoutTask = Task.Delay(20_000, cancellationToken);
+                    var finishedTask = await Task.WhenAny(timeoutTask, handler.RequestHandled).ConfigureAwait(false);
 
-                    if (t == challenge.Completion)
-                    {
-                        waitWithSem = false;
-                        _logger.LogInformation("Успешно выполнили входящий запрос; ждём 15 сек перед запросом сертификата");
-                        await Task.Delay(15_000).ConfigureAwait(false);
-                    }
-                    else
-                    // Таймаут.
+                    if (finishedTask == timeoutTask) // Таймаут
                     {
                         waitWithSem = false;
                         _logger.LogInformation("Запрос ещё не поступил; дополнительно ожидаем ещё 5 сек");
-                        await Task.Delay(5000).ConfigureAwait(false);
+                        await Task.Delay(5000, cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        waitWithSem = false;
+                        _logger.LogInformation("Успешно выполнили входящий запрос; ждём 15 сек перед запросом сертификата");
+                        await Task.Delay(15_000, cancellationToken).ConfigureAwait(false);
                     }
                 }
                 else
                 {
                     _logger.LogInformation("Заказ всё ещё в статусе Pending; делаем дополнительную паузу на 5 сек");
-                    await Task.Delay(5_000).ConfigureAwait(false);
+                    await Task.Delay(5_000, cancellationToken).ConfigureAwait(false);
                 }
 
                 _logger.LogInformation("Запрашиваем статус нашего заказа");
-                status = await httpChallenge.Resource().ConfigureAwait(false);
+                acmeResponse = await challenge.Resource().ConfigureAwait(false);
             }
 
-            if (status.Status == ChallengeStatus.Valid)
+            if (acmeResponse.Status != ChallengeStatus.Valid)
             {
-                _logger.LogInformation("Статус заказа: Valid; загружаем сертификат");
+                _logger.LogError("Статус заказа: {Status}", acmeResponse.Status);
+                throw new LetsEncryptMikroTikException($"Статус заказа: {acmeResponse.Status}. Ошибка: {acmeResponse.Error.Detail}");
             }
-            else
-            {
-                _logger.LogError("Статус заказа: {Status}", status.Status);
-                throw new LetsEncryptMikroTikException($"Статус заказа: {status.Status}. Ошибка: {status.Error.Detail}");
-            }
+
+            _logger.LogInformation("Статус заказа: Valid; загружаем сертификат");
         }
-        finally
+        finally // Восстанавливаем настройки микротика.
         {
-            // Возвращаем NAT
-            ClosePort(mtFilterId);
-            RemoveNatRule(mtNatId);
-            RemoveMangleRule(mtMangleId);
+            if (mtFilterId != null)
+                RemoveFilterRule(mtFilterId);
+            if (mtNatId != null)
+                RemoveNatRule(mtNatId);
+            if (mtMangleId != null)
+                RemoveMangleRule(mtMangleId);
         }
     }
 
@@ -216,7 +241,7 @@ internal sealed class Acme
             .Attribute("comment", "Let's Encrypt challenge")
             .Scalar<string>();
 
-        return id;
+        return id ?? throw new LetsEncryptMikroTikException("Unable to create filter rule");
     }
 
     private string MtAllowMangleRule(int dstPort)
@@ -234,16 +259,14 @@ internal sealed class Acme
             .Attribute("comment", "Let's Encrypt challenge")
             .Scalar<string>();
 
-        return id;
+        return id ?? throw new LetsEncryptMikroTikException("Unable to create mangle rule");
     }
 
-    private void ClosePort(string ruleId)
+    private void RemoveFilterRule(string ruleId)
     {
         _logger.LogInformation("Удаляем созданное правило фаервола");
 
-        // Удалить правило.
-        _connection
-            .Command("/ip firewall filter remove")
+        _connection.Command("/ip firewall filter remove")
             .Attribute(".id", ruleId)
             .Send();
     }
@@ -267,7 +290,7 @@ internal sealed class Acme
             .Attribute("comment", "Let's Encrypt challenge")
             .Scalar<string>();
 
-        return ruleId;
+        return ruleId ?? throw new LetsEncryptMikroTikException("Unable to create NAT rule");
     }
 
     private void RemoveNatRule(string ruleId)

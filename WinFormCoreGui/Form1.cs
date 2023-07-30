@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using LetsEncryptMikroTik.Core;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Core;
@@ -38,7 +40,7 @@ public partial class Form1 : Form
         InitializeComponent();
 
         textBox_MtAddress.Text = Properties.Settings.Default.MtAddress;
-        textBox_mtPort.Text = Properties.Settings.Default.MikroTikPort.ToString();
+        textBox_mtPort.Text = Properties.Settings.Default.MikroTikPort.ToString(CultureInfo.InvariantCulture);
         textBox_MtLogin.Text = Properties.Settings.Default.MikroTikLogin;
         textBox_ftpLogin.Text = Properties.Settings.Default.FtpLogin;
         textBox_mtPassword.Text = Unprotect(Properties.Settings.Default.MikroTikPassword);
@@ -46,7 +48,7 @@ public partial class Form1 : Form
         textBox_domainName.Text = Properties.Settings.Default.DomainName;
         textBox_email.Text = Properties.Settings.Default.Email;
         textBox_wan.Text = Properties.Settings.Default.WanIface;
-        groupBox_ftp.Enabled = checkBox1.Checked;
+        groupBox_ftp.Enabled = checkBox_ftpCredentials.Checked;
 
         comboBox_lec.DataSource = Core.CertUpdater.GetAddresses();
         var selIndex = Properties.Settings.Default.SelectedAddress;
@@ -66,7 +68,7 @@ public partial class Form1 : Form
 
         string ftpLogin;
         string ftpPassword;
-        if (checkBox1.Checked)
+        if (checkBox_ftpCredentials.Checked)
         {
             ftpLogin = textBox_ftpLogin.Text.Trim();
             ftpPassword = textBox_ftpPassword.Text;
@@ -77,10 +79,10 @@ public partial class Form1 : Form
             ftpPassword = mtPassword;
         }
 
-        var options = new Core.Options
+        var options = new Options
         {
             MikroTikAddress = textBox_MtAddress.Text.Trim(),
-            MikroTikPort = int.Parse(textBox_mtPort.Text),
+            MikroTikPort = int.Parse(textBox_mtPort.Text, CultureInfo.InvariantCulture),
             MikroTikLogin = mtLogin,
             MikroTikPassword = mtPassword,
             FtpLogin = ftpLogin,
@@ -89,9 +91,9 @@ public partial class Form1 : Form
             Email = textBox_email.Text.Trim(),
             WanIface = textBox_wan.Text.Trim(),
             Force = checkBox_force.Checked,
-            LetsEncryptAddress = (Core.LeUri)(Uri)comboBox_lec.SelectedValue!,
+            LetsEncryptAddress = (LeUri)(Uri)comboBox_lec.SelectedValue!,
             SaveFile = checkBox_saveFile.Checked,
-            UseAlpn = radioButton_alpn.Checked,
+            VerificationMethod = SelectedVerificationMethod()
         };
 
         button_start.Enabled = false;
@@ -130,13 +132,33 @@ public partial class Form1 : Form
         }
     }
 
+    private VerificationMethod SelectedVerificationMethod()
+    {
+        if (radioButton_http.Checked)
+        {
+            return VerificationMethod.HTTP01;
+        }
+        else if (radioButton_alpn.Checked)
+        {
+            return VerificationMethod.TLSALPN01;
+        }
+        else if (radioButton_dns01.Checked)
+        {
+            return VerificationMethod.DNS01;
+        }
+        else
+        {
+            throw new NotSupportedException();
+        }
+    }
+
     private static Logger CreateLogger(InMemorySink? logSink, bool writeToFile)
     {
         var loggerBuilder = new LoggerConfiguration();
 
         if (writeToFile)
         {
-            loggerBuilder.WriteTo.File("program.log");
+            loggerBuilder.WriteTo.File("program.log", formatProvider: CultureInfo.InvariantCulture);
         }
 
         if (logSink != null)
@@ -148,7 +170,7 @@ public partial class Form1 : Form
         if (Environment.UserInteractive)
         {
             loggerBuilder
-                .WriteTo.Console();
+                .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture);
         }
 
         return loggerBuilder.CreateLogger();
@@ -264,7 +286,7 @@ public partial class Form1 : Form
 
     private void TextBox_mtPort_TextChanged(object sender, EventArgs e)
     {
-        Properties.Settings.Default.MikroTikPort = int.Parse(textBox_mtPort.Text);
+        Properties.Settings.Default.MikroTikPort = int.Parse(textBox_mtPort.Text, CultureInfo.InvariantCulture);
     }
 
     private void TextBox_ftpPassword_TextChanged(object sender, EventArgs e)
@@ -387,7 +409,7 @@ public partial class Form1 : Form
 
     private void CheckBox1_CheckedChanged(object sender, EventArgs e)
     {
-        groupBox_ftp.Enabled = checkBox1.Checked;
+        groupBox_ftp.Enabled = checkBox_ftpCredentials.Checked;
     }
 
     private void TextBox_mtPort_Leave(object sender, EventArgs e)

@@ -6,9 +6,9 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
-namespace LetsEncryptMikroTik.Core;
+namespace LetsEncryptMikroTik.Core.Challenge;
 
-internal sealed class AlpnChallenge : IChallenge, IDisposable
+internal sealed class Alpn01ChallengeHandler : IChallengeHandler, IDisposable
 {
     private readonly TcpListener _listener;
     private readonly string _identifier;
@@ -18,7 +18,7 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
     private readonly TaskCompletionSource<int> _tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int? _listenPort;
 
-    public AlpnChallenge(IPAddress localAddress, string identifier, string challengeTokenValue)
+    public Alpn01ChallengeHandler(IPAddress localAddress, string identifier, string challengeTokenValue)
     {
         ArgumentNullException.ThrowIfNull(localAddress);
         ArgumentNullException.ThrowIfNull(identifier);
@@ -30,8 +30,8 @@ internal sealed class AlpnChallenge : IChallenge, IDisposable
         _listener = new TcpListener(localAddress, 0);
     }
 
-    public Task Completion => _tcs.Task;
     public int PublicPort => 443; // Не менять.
+    public Task RequestHandled => _tcs.Task;
     public int ListenPort => _listenPort ?? throw new InvalidOperationException("Сначала нужно вызвать Start");
 
     public void Dispose()

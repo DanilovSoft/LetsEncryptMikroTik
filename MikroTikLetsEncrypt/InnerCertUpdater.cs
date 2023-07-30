@@ -65,7 +65,7 @@ internal sealed class InnerCertUpdater
                 using (var keyStream = File.CreateText(keyFilePath))
                 {
                     var acme = new Acme(_connection, _options, _logger);
-                    newCert = await acme.GetCertAsync().ConfigureAwait(false); // Загрузить сертификат от Let's Encrypt.
+                    newCert = await acme.GetCertAsync(null, cancellationToken).ConfigureAwait(false); // Загрузить сертификат от Let's Encrypt.
                     certStream.Write(newCert.CertPem);
                     keyStream.Write(newCert.KeyPem);
                 }
@@ -86,7 +86,7 @@ internal sealed class InnerCertUpdater
         else
         {
             var acme = new Acme(_connection, _options, _logger);
-            newCert = await acme.GetCertAsync().ConfigureAwait(false); // Загрузить сертификат от Let's Encrypt.
+            newCert = await acme.GetCertAsync(null, cancellationToken).ConfigureAwait(false); // Загрузить сертификат от Let's Encrypt.
         }
 
         // Загружаем сертификат и приватный ключ в микротик по FTP.
@@ -130,15 +130,10 @@ internal sealed class InnerCertUpdater
     {
         _logger.LogInformation("Проверяем что в микротике есть интерфейс '{WanIface}'", _options.WanIface);
 
-        var ifaceId = _connection.Command("/interface print")
+        _ = _connection.Command("/interface print")
             .Query("name", _options.WanIface)
             .Proplist(".id")
-            .ScalarOrDefault<string>(cancellationToken);
-
-        if (ifaceId == null)
-        {
-            throw new LetsEncryptMikroTikException($"В Микротике не найден интерфейс '{_options.WanIface}'");
-        }
+            .ScalarOrDefault<string>(cancellationToken) ?? throw new LetsEncryptMikroTikException($"В Микротике не найден интерфейс '{_options.WanIface}'");
     }
 
     private bool TryGetExpiredAfter(out TimeSpan expires, out CertificateDto[] certes, CancellationToken cancellationToken)
@@ -151,7 +146,7 @@ internal sealed class InnerCertUpdater
             .Proplist(".id,name,invalid-after")
             .ToArray<CertificateDto>(cancellationToken);
 
-        var invalidAfter = certes.Select(x => new { Cert = x, InvalidAfter = (DateTime?)DateTime.Parse(x.InvalidAfter, CultureInfo.InvariantCulture) })
+        var invalidAfter = certes.Select(x => new { Cert = x, InvalidAfter = x.InvalidAfter == null ? default(DateTime?) : DateTime.Parse(x.InvalidAfter, CultureInfo.InvariantCulture) })
             .DefaultIfEmpty()
             .Min(x => x?.InvalidAfter);
 
@@ -185,10 +180,13 @@ internal sealed class InnerCertUpdater
     private static void CreateDirectory(string filePath)
     {
         var directoryPath = Path.GetDirectoryName(filePath);
-        if (!Directory.Exists(directoryPath))
+
+        if (directoryPath == null || Directory.Exists(directoryPath))
         {
-            Directory.CreateDirectory(directoryPath);
+            return;
         }
+
+        Directory.CreateDirectory(directoryPath);
     }
 
     private static string GetFilePath(string fileName)
